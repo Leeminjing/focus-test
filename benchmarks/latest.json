@@ -1,0 +1,91 @@
+{
+  "source_revision": "0ffb96486945b0101c5f0e35539c85e633242e25",
+  "os": "windows",
+  "arch": "amd64",
+  "go_version": "go1.26.5",
+  "mode": "simulation",
+  "input": "presealed",
+  "cold_seal_ms": 22.96,
+  "warm_seal_ms": 19.827,
+  "samples": [
+    {
+      "contexts": 1,
+      "reuse": "none",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 1,
+      "completion_ms": 516.023,
+      "first_observed_failure_ms": 14.78
+    },
+    {
+      "contexts": 1,
+      "reuse": "inflight",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 1,
+      "completion_ms": 512.483,
+      "first_observed_failure_ms": 12.764
+    },
+    {
+      "contexts": 2,
+      "reuse": "none",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 2,
+      "completion_ms": 514.376,
+      "first_observed_failure_ms": 14.603
+    },
+    {
+      "contexts": 2,
+      "reuse": "inflight",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 1,
+      "completion_ms": 514.284,
+      "first_observed_failure_ms": 15.02
+    },
+    {
+      "contexts": 4,
+      "reuse": "none",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 4,
+      "completion_ms": 1027.994,
+      "first_observed_failure_ms": 14.833
+    },
+    {
+      "contexts": 4,
+      "reuse": "inflight",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 1,
+      "completion_ms": 515.531,
+      "first_observed_failure_ms": 15.344
+    },
+    {
+      "contexts": 8,
+      "reuse": "none",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 8,
+      "completion_ms": 2064.041,
+      "first_observed_failure_ms": 13.426
+    },
+    {
+      "contexts": 8,
+      "reuse": "inflight",
+      "cpu_units": 2,
+      "memory_mib": 512,
+      "executed_jobs": 1,
+      "completion_ms": 516.375,
+      "first_observed_failure_ms": 15.972
+    }
+  ],
+  "limits": [
+    "single repetition per cell",
+    "in-memory events; durable journal latency excluded",
+    "no real application or Focus model consumption measurement",
+    "no persistent result cache",
+    "no CPU-time or peak-memory measurement"
+  ]
+}
