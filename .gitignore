@@ -1,0 +1,5 @@
+/bin/
+/.focus-test/
+/coverage.out
+*.test
+*.test.exe

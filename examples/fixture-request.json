@@ -1,0 +1,5 @@
+{
+  "protocol_version": 1,
+  "idempotency_key": "first-fixture-run",
+  "test_ids": ["fixture.fail", "fixture.slow", "fixture.pass"]
+}
