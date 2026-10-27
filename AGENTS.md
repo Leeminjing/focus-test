@@ -20,6 +20,16 @@ need justifies it and document that decision.
   `protocol/README.md` and examples when changing the contract.
 - `internal/localnet` owns the shared local address boundary. Do not duplicate
   endpoint validation in command entry points.
+- `internal/snapshot` owns sealing, manifest validation, independent copies and
+  declared-input verification. Use its rooted operations, not ad hoc path joins.
+- `internal/evidence` owns durable checksummed records and the state-directory
+  OS lock. Commit before publishing; failed storage stops trustworthy results.
+- `internal/runner` owns supported process providers, environment validation,
+  adapter report validation and process-tree cleanup. Never silently fall back
+  from focus-broker or network-denied policies to host execution.
+- Production HTTP must use `server.Authorized`, not the unauthenticated in-memory
+  test handler. Keep runtime credentials outside model arguments, logs and any
+  model-readable workspace when integrating Focus.
 - The fixture adapter simulates cases in process. Its results always retain
   `mode: "simulation"` and cannot be adopted as real test evidence.
 - Requests, jobs, attempts, and result adoptions are distinct concepts. A retry
@@ -32,7 +42,9 @@ need justifies it and document that decision.
   not write Focus's database.
 - Update implementation status with each milestone. Do not present planned
   snapshot, persistence, deduplication, isolation, or sandbox capabilities as
-  already available. Initialization is a partial M0 foundation.
+  already available. Real adapters currently require reuse_policy none because
+  external installed dependencies are not fully sealed. Unknown real cleanup
+  quarantines admission. Focus broker/adoption integration remains unfinished.
 
 ## Verification
 
@@ -40,6 +52,7 @@ Format changed Go files with `gofmt`. Run relevant tests while developing, then
 `go vet ./...`, `go test ./...`, and `go build ./cmd/...` before delivery. Run the
 race detector when the host toolchain supports it; CI covers Linux. Test
 observable protocol and lifecycle behavior, especially failures and shutdown.
+Also run `python -m unittest discover -s integration/focus -v` after client changes.
 
 Use the current checkout unless isolation is needed. Do not create remote
 repositories, push commits, or change a license without a user request.

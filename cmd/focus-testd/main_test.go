@@ -18,9 +18,10 @@ func TestDaemonStartupAndShutdown(t *testing.T) {
 	reader, writer := io.Pipe()
 	defer reader.Close()
 	done := make(chan error, 1)
+	dataDir := t.TempDir()
 	go func() {
 		defer writer.Close()
-		done <- run(ctx, []string{"--listen", "127.0.0.1:0"}, writer, io.Discard)
+		done <- run(ctx, []string{"--listen", "127.0.0.1:0", "--data-dir", dataDir, "--adapter-dir", "../../adapters"}, writer, io.Discard)
 	}()
 	scanner := bufio.NewScanner(reader)
 	if !scanner.Scan() {

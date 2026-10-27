@@ -50,10 +50,12 @@ type Submission struct {
 }
 
 type Event struct {
-	JobID  string `json:"job_id"`
-	Seq    int    `json:"seq"`
-	Kind   string `json:"kind"`
-	TestID string `json:"test_id,omitempty"`
+	JobID   string `json:"job_id"`
+	Seq     int    `json:"seq"`
+	Kind    string `json:"kind"`
+	TestID  string `json:"test_id,omitempty"`
+	Outcome string `json:"outcome,omitempty"`
+	Message string `json:"message,omitempty"`
 }
 
 type Result struct {

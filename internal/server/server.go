@@ -4,9 +4,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
-	"io"
 	"net/http"
-	"strconv"
 
 	"focus-test-runtime/internal/protocol"
 	"focus-test-runtime/internal/runtime"
@@ -15,24 +13,17 @@ import (
 func New(service *runtime.Service) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+		if err := service.Ready(); err != nil {
+			runtimeError(w, err)
+			return
+		}
 		write(w, http.StatusOK, map[string]any{
-			"protocol_version": protocol.Version, "status": "ok", "mode": protocol.Simulation,
+			"protocol_version": protocol.Version, "status": "ok", "mode": "local-runtime",
 		})
 	})
 	mux.HandleFunc("POST /v1/fixture-jobs", func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
 		var request protocol.FixtureRequest
-		if err := decoder.Decode(&request); err != nil {
-			badJSON(w, err)
-			return
-		}
-		if err := decoder.Decode(new(any)); err != io.EOF {
-			if err == nil {
-				err = errors.New("expected one JSON object")
-			}
-			badJSON(w, err)
+		if !decodeRequest(w, r, &request) {
 			return
 		}
 		if err := request.Validate(); err != nil {
@@ -58,27 +49,8 @@ func New(service *runtime.Service) http.Handler {
 		}
 		write(w, http.StatusOK, result)
 	})
-	mux.HandleFunc("GET /v1/fixture-jobs/{job}/events", func(w http.ResponseWriter, r *http.Request) {
-		after := 0
-		if value := r.URL.Query().Get("after_seq"); value != "" {
-			var err error
-			after, err = strconv.Atoi(value)
-			if err != nil || after < 0 {
-				writeError(w, http.StatusBadRequest, "invalid_cursor", errors.New("after_seq must be a nonnegative integer"))
-				return
-			}
-		}
-		page, err := service.Events(r.PathValue("job"), after)
-		if err != nil {
-			writeError(w, http.StatusNotFound, "job_not_found", err)
-			return
-		}
-		if after > page.NextSeq {
-			writeError(w, http.StatusBadRequest, "invalid_cursor", errors.New("after_seq is ahead of this job"))
-			return
-		}
-		write(w, http.StatusOK, page)
-	})
+	mux.HandleFunc("GET /v1/fixture-jobs/{job}/events", eventHandler(service))
+	registerExecutionRoutes(mux, service)
 	return mux
 }
 

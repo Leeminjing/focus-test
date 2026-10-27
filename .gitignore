@@ -3,3 +3,6 @@
 /coverage.out
 *.test
 *.test.exe
+__pycache__/
+*.pyc
+.pytest_cache/

@@ -10,12 +10,15 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"focus-test-runtime/internal/localnet"
+	"focus-test-runtime/internal/runner"
 	"focus-test-runtime/internal/runtime"
 	"focus-test-runtime/internal/server"
+	"focus-test-runtime/internal/snapshot"
 )
 
 func main() {
@@ -31,6 +34,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	flags := flag.NewFlagSet("focus-testd", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	address := flags.String("listen", "127.0.0.1:7337", "literal loopback IP and port; 0 chooses a free port")
+	dataDir := flags.String("data-dir", ".focus-test", "private runtime state and snapshot directory")
+	cpu := flags.Int("cpu-units", 2, "CPU admission budget")
+	memory := flags.Int("memory-mib", 1024, "memory admission budget")
+	adapterDir := flags.String("adapter-dir", "adapters", "versioned local adapter script directory")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -48,15 +55,31 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 		return err
 	}
 	defer listener.Close()
-	service := runtime.New()
+	store, err := snapshot.Open(filepath.Join(*dataDir, "snapshots"))
+	if err != nil {
+		return err
+	}
+	defer store.Close()
+	provider, err := runner.Open(*adapterDir)
+	if err != nil {
+		return err
+	}
+	service, err := runtime.Open(runtime.Config{Snapshots: store, StateDir: filepath.Join(*dataDir, "state"), CPUUnits: *cpu, MemoryMiB: *memory, Runner: provider})
+	if err != nil {
+		return err
+	}
 	defer service.Close()
+	token, err := localnet.EnsureToken(filepath.Join(*dataDir, "token"))
+	if err != nil {
+		return err
+	}
 	httpServer := &http.Server{
-		Handler: server.New(service), ReadHeaderTimeout: 5 * time.Second,
+		Handler: server.Authorized(service, token), ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second,
 	}
 	done := make(chan error, 1)
 	go func() { done <- httpServer.Serve(listener) }()
-	if _, err := fmt.Fprintf(stdout, "focus-testd listening on http://%s (simulation only)\n", listener.Addr()); err != nil {
+	if _, err := fmt.Fprintf(stdout, "focus-testd listening on http://%s (local runtime)\n", listener.Addr()); err != nil {
 		_ = httpServer.Close()
 		<-done
 		return err
