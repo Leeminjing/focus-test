@@ -93,7 +93,7 @@ func (r ExecutionRequest) Validate() error {
 			}
 		}
 	}
-	if r.Plan.Adapter != "node-v1" && r.Plan.Adapter != "pytest-v1" && r.Plan.Adapter != "fixture-v1" {
+	if r.Plan.Adapter != "node-v1" && r.Plan.Adapter != "node-sealed-v1" && r.Plan.Adapter != "pytest-v1" && r.Plan.Adapter != "fixture-v1" {
 		return errors.New("unsupported versioned adapter")
 	}
 	if len(r.Plan.TestIDs) == 0 || len(r.Plan.TestIDs) > 10000 || r.Plan.Workers < 1 || r.Plan.Workers > 256 {
@@ -109,7 +109,7 @@ func (r ExecutionRequest) Validate() error {
 			if !fs.ValidPath(file) || file == "." || strings.ContainsAny(file, "\\:\x00*?[]") || strings.HasPrefix(file, "-") {
 				return errors.New("test IDs must use explicit relative slash paths")
 			}
-			if r.Plan.Adapter == "node-v1" && strings.Contains(id, "::") {
+			if (r.Plan.Adapter == "node-v1" || r.Plan.Adapter == "node-sealed-v1") && strings.Contains(id, "::") {
 				return errors.New("node-v1 selects explicit test files")
 			}
 		}

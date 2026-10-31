@@ -57,8 +57,13 @@ type is `protocol.ExecutionRequest`:
 Environment variables are persisted as hashes. For real execution the provider
 revalidates the current executable, script and inherited environment before
 launch. Python pytest uses a controlled plugin and disables automatic third
-party plugin loading. External installed-library closure is not established;
-real adapters therefore require `reuse_policy: none`.
+party plugin loading. External installed-library closure is not established for
+`node-v1` or `pytest-v1`; these adapters require `reuse_policy: none`.
+The explicit `node-sealed-v1` profile supports inflight sharing for cooperative
+self-contained CJS/ESM/JSON unit tests. It hashes its dependency guard, strips
+host environment preloads, limits module resolution to sealed sources and a
+builtin allowlist, and requires workers=1. See [the full input contract](../docs/node-sealed.md).
+The host OS/runtime remains trusted; this is not a malicious-code sandbox.
 
 The versioned execution key uses typed JSON: struct field order is fixed,
 string map keys are sorted by Go's encoding/json, nil/empty optional collections
@@ -69,7 +74,7 @@ a key verifies a descriptor, not execution or environment hermeticity.
 
 ## Sharing and cancellation
 
-Only deterministic `fixture-v1` supports `inflight` today; default `none` means
+`fixture-v1` and the opt-in `node-sealed-v1` support `inflight`; `none` means
 different requests create different jobs. No new request adopts completed
 results. Same caller+domain+idempotency key and same descriptor returns the
 original request, including after daemon restart. A changed descriptor conflicts.
@@ -95,6 +100,14 @@ Real adapters use a separate JSONL file with strict version/sequence and a final
 report closure. Early `case_failed` is diagnostic; final `case_finished` counts
 the case once after phase accounting. Duplicate/malformed/incomplete reports,
 missing requested scopes and zero cases cannot prove passing.
+
+Node's execution-ordered `test:complete` drives early diagnostics. If process
+isolation exposes a failed file before its named events, `group_failed` carries
+that file's identity. It is a separate group observation, never a failed-case
+increment. Consumers should notify on the first `case_failed` OR `group_failed`,
+coalesce subsequent progress and retain final named case details. Complete and
+ordered events for the same case are correlated, including older Node versions
+that renumber forwarded `testNumber` values.
 
 Final results include original Job/Attempt, requested snapshot, execution key,
 exit code, report/cleanup status, scope and counts, retained workspace, diagnostic
@@ -133,7 +146,8 @@ not prevent deliberate group escape or limit host file/network permissions.
 ## Focus boundary
 
 `focus-broker` isolation is unsupported and rejected. See
-`integration/focus/README.md` for the still-required governed broker, workspace
-revision binding, event consumption, ResultAdoption and completion validation.
-The experimental transport client does not modify Focus's database or promote
-advisory results into completion evidence.
+`integration/focus/README.md` for the optional typed feedback middleware and the
+still-required governed broker, workspace revision binding, ResultAdoption and
+completion validation. The feedback probe records actual scripted-model input
+and returned-response receipts at precise graph checkpoints. It does not modify
+Focus's acceptance database or promote advisory results into completion evidence.

@@ -41,6 +41,7 @@ class ClientTest(unittest.TestCase):
                 client = RuntimeClient(f"http://127.0.0.1:{server.server_port}", token_file)
                 self.assertEqual(client.submit({})["job_id"], "original-job-A")
                 self.assertEqual(client.result("request-B")["request_id"], "request-B")
+                self.assertEqual(client.capabilities()["path"], "/v1/capabilities")
                 self.assertTrue(client.events("original-job-A", 3)["path"].endswith("after_seq=3"))
                 self.assertTrue(client.cancel("request-B")["path"].endswith("/cancel"))
                 with self.assertRaises(ValueError):

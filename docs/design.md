@@ -245,6 +245,8 @@ Windows 使用受管理的 Job Object 追踪和终止后代，需在测试代码
 
 ## Focus 接入设计
 
+本轮实现进度：新增 opt-in node-sealed-v1 的受限真实在途共享，以及 `integration/focus/feedback_middleware.py` 的可选图反馈。它以既有 `world_state_update / origin=runtime / scope=run` 保存测试观察，不伪装成用户授权或协作消息；在精确 typed checkpoint、实际请求可见消息与 request manifest 三方匹配且模型返回后记录回执。此路径仍是 advisory，尚未接入生产 AgentFactory/Patrol、Focus 执行代理、版本写屏障或验收 ResultAdoption。下列生产设计仍须实现，不能因实验图通过而移除现有验证器约束。
+
 接入分两步，避免将调度实验与完成验收修改混为一个里程碑。
 
 第一步增加 test_submit、test_events、test_result、test_cancel 工具。Focus 工具授权与原有 host_command 能力衔接，身份由服务端绑定。运行时事件进入专门测试活动入口；首个有效失败、阶段完成和最终完成可触发模型输入，普通进度合并。已有 inbox 提供消费边界，但测试事件类型、持久化与回执需要明确增加，不能伪装为来自用户的新指令。

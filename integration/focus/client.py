@@ -26,7 +26,8 @@ class RuntimeClient:
         if not parsed.hostname or not ipaddress.ip_address(parsed.hostname).is_loopback or not parsed.port:
             raise ValueError("expected a literal loopback IP and port")
         self.base_url = base_url.rstrip("/")
-        self.token = Path(token_file).read_text(encoding="utf-8").strip()
+        self.token_path = Path(token_file).resolve()
+        self.token = self.token_path.read_text(encoding="utf-8").strip()
         if not 26 <= len(self.token) <= 256:
             raise ValueError("invalid runtime credential")
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
@@ -50,6 +51,9 @@ class RuntimeClient:
         # Focus's service must authorize and construct the descriptor. Do not
         # grant a model the runtime credential or silently change isolation.
         return self._call("POST", "/v1/requests", descriptor)
+
+    def capabilities(self):
+        return self._call("GET", "/v1/capabilities")
 
     def result(self, request_id):
         return self._call("GET", "/v1/requests/" + quote(request_id, safe=""))

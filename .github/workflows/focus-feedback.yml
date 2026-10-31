@@ -1,0 +1,41 @@
+name: Focus graph feedback
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  feedback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: Leeminjing/Focus
+          ref: 853969375f9df46936552809dce3d543dd2403e4
+          path: .focus-test/upstream-focus
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install pinned Focus harness dependencies
+        run: python -m pip install ./.focus-test/upstream-focus/backend/packages/harness
+      - name: Actual graph, scripted model, real shared test
+        env:
+          FOCUS_TEST_UPSTREAM: ${{ github.workspace }}/.focus-test/upstream-focus
+          FOCUS_TEST_FEEDBACK_REPORT: ${{ github.workspace }}/focus-feedback-ci.json
+        run: go test ./cmd/focus-testd -run TestUpstreamFocus -count=1 -v
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: focus-feedback
+          path: focus-feedback-ci.json

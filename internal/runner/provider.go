@@ -45,6 +45,7 @@ type Outcome struct {
 type adapter struct {
 	executable string
 	script     string
+	guard      string
 }
 type Provider struct{ adapters map[string]adapter }
 
@@ -68,6 +69,13 @@ func Open(adapterDirectory string) (*Provider, error) {
 			return nil, err
 		}
 		p.adapters[id] = adapter{executable: executable, script: script}
+		if id == "node-v1" {
+			guard := filepath.Join(abs, "node", "sealed-guard.mjs")
+			if _, err := os.Stat(guard); err != nil {
+				return nil, err
+			}
+			p.adapters["node-sealed-v1"] = adapter{executable: executable, script: script, guard: guard}
+		}
 	}
 	return p, nil
 }
@@ -105,6 +113,19 @@ func (p *Provider) environment(id string) (protocol.Environment, []string, error
 		}
 	}
 	delete(values, "FOCUS_TEST_EVENTS")
+	if id == "node-sealed-v1" {
+		// No preloads, custom loaders, coverage writers or npm search paths may
+		// execute before the sealed profile's dependency guard.
+		minimal := map[string]string{"TZ": "UTC", "LANG": "C", "LC_ALL": "C"}
+		if runtime.GOOS == "windows" {
+			for name, value := range values {
+				if strings.EqualFold(name, "SystemRoot") {
+					minimal[name] = value
+				}
+			}
+		}
+		values = minimal
+	}
 	if id == "pytest-v1" {
 		values["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] = "1"
 	}
@@ -115,16 +136,28 @@ func (p *Provider) environment(id string) (protocol.Environment, []string, error
 		actual = append(actual, name+"="+value)
 	}
 	sort.Strings(actual)
+	data := map[string]string{"adapter": script, "runner_location": hash([]byte(a.executable))}
+	if a.guard != "" {
+		guard, err := fileDigest(a.guard)
+		if err != nil {
+			return protocol.Environment{}, nil, err
+		}
+		data["dependency_guard"] = guard
+		data["profile"] = hash([]byte("node-sealed-v1/read-project/write-events/no-packages/single-process"))
+	}
 	return protocol.Environment{OS: runtime.GOOS, Arch: runtime.GOARCH, RunnerDigest: runner,
-		Variables: variables, Data: map[string]string{"adapter": script, "runner_location": hash([]byte(a.executable))}}, actual, nil
+		Variables: variables, Data: data}, actual, nil
 }
 
 func (p *Provider) Validate(spec protocol.ExecutionRequest) error {
 	if spec.Policy.Isolation != "local-process" || spec.Policy.Network != "declared" {
 		return errors.New("local runner cannot enforce the requested sandbox policy")
 	}
-	if spec.ReusePolicy != "none" {
+	if spec.ReusePolicy != "none" && spec.Plan.Adapter != "node-sealed-v1" {
 		return errors.New("real adapters require reuse_policy none until external dependency closure is verified")
+	}
+	if spec.Plan.Adapter == "node-sealed-v1" && spec.Plan.Workers != 1 {
+		return errors.New("node-sealed-v1 requires one process and one CPU admission unit")
 	}
 	if len(spec.Plan.Args) != 0 {
 		return errors.New("extra runner arguments are not supported in adapter v1")
@@ -188,13 +221,17 @@ func (p *Provider) Run(ctx context.Context, spec protocol.ExecutionRequest, work
 	defer stderr.Close()
 	a := p.adapters[spec.Plan.Adapter]
 	args := []string{}
-	if spec.Plan.Adapter == "node-v1" {
+	if spec.Plan.Adapter == "node-v1" || spec.Plan.Adapter == "node-sealed-v1" {
 		reporterPath := filepath.ToSlash(a.script)
 		if !strings.HasPrefix(reporterPath, "/") {
 			reporterPath = "/" + reporterPath
 		}
 		reporterURL := (&url.URL{Scheme: "file", Path: reporterPath}).String()
 		args = []string{"--test", fmt.Sprintf("--test-concurrency=%d", spec.Plan.Workers), "--test-reporter=" + reporterURL}
+		if a.guard != "" {
+			args = append(args, "--test-isolation=none", "--permission", "--allow-fs-read="+workspace,
+				"--allow-fs-read="+filepath.Dir(a.script), "--allow-fs-write="+eventPath, "--import="+fileURL(a.guard))
+		}
 	} else {
 		args = []string{a.script, "-q", "--override-ini=addopts="}
 	}
@@ -238,7 +275,7 @@ func (p *Provider) Run(ctx context.Context, spec protocol.ExecutionRequest, work
 				}
 				seq++
 				switch event.Kind {
-				case "case_failed":
+				case "case_failed", "group_failed":
 					if event.TestID == "" {
 						return errors.New("failure without test identity")
 					}
@@ -286,6 +323,9 @@ func (p *Provider) Run(ctx context.Context, spec protocol.ExecutionRequest, work
 				protocolErr = readEvents()
 			}
 			protocolErr = errors.Join(protocolErr, outputQuota(stdout, stderr, channel))
+			// The adapter and executable are trusted inputs as well as the
+			// project snapshot. A changed provider cannot settle passing evidence.
+			protocolErr = errors.Join(protocolErr, p.Validate(spec))
 			if len(pending) != 0 || !final {
 				protocolErr = errors.Join(protocolErr, errors.New("adapter report not closed"))
 			}
@@ -305,6 +345,14 @@ func (p *Provider) Run(ctx context.Context, spec protocol.ExecutionRequest, work
 			}
 		}
 	}
+}
+
+func fileURL(name string) string {
+	path := filepath.ToSlash(name)
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return (&url.URL{Scheme: "file", Path: path}).String()
 }
 
 func fileDigest(name string) (string, error) {

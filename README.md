@@ -30,7 +30,7 @@ flowchart LR
   E --> F
 ```
 
-缓存是目标架构的一部分，目前只实现模拟任务的在途合并。真实 Node/pytest 执行要求 `reuse_policy: "none"`，直到 Python 安装包、原生库等外部依赖闭包可以核验。已经完成的结果不会被新请求复用；同一幂等提交的重试仍返回原记录。
+缓存是目标架构的一部分，目前支持模拟任务和受限 `node-sealed-v1` 的在途合并。通用 `node-v1` / `pytest-v1` 仍要求 `reuse_policy: "none"`，不假定安装包、原生库等外部依赖已经封存。已经完成的结果不会被新请求复用；同一幂等提交的重试仍返回原记录。
 
 ## 启动与真实测试
 
@@ -69,6 +69,19 @@ go run ./cmd/focus-test submit-execution --file .focus-test/pytest-request.json
 
 `plan` 从守护进程读取环境身份，包含可执行文件、适配脚本和环境变量摘要；环境发生变化时重新生成计划。环境变量只将哈希写入请求和日志，不将原值持久化。pytest 禁用自动加载第三方插件，保持单进程 fixture 范围；当前不接受额外运行参数。
 
+## 共享真实 Node 测试
+
+首个可复用配置是明确选择的 `node-sealed-v1`，用于可信、确定性、自包含的单元测试。它允许快照内的 `.cjs` / `.mjs` / `.json` 模块和有限的 Node 内置模块，不加载 npm 包、原生插件或工作区外的项目依赖。具体合同见 [受限 Node 配置](docs/node-sealed.md)。
+
+```powershell
+$sealedNode = go run ./cmd/focus-test snapshot --source examples/node-sealed | ConvertFrom-Json
+go run ./cmd/focus-test plan --snapshot $sealedNode.snapshot_id --adapter node-sealed-v1 --tests sample.test.cjs --caller context-a --reuse inflight > .focus-test/shared-node.json
+```
+
+不同调用方在任务进行中提交同一输入才共享，不能靠重复同一幂等键模拟两个请求。回归测试通过资源屏障保证两个请求先订阅，再执行真实进程；同时验证独立取消及不同快照分别结算。
+
+Node reporter 使用按完成顺序的 `test:complete` 提前通知，最终仍以完整 `test:pass` / `test:fail` 报告结算。部分 Node 版本先暴露文件完成事件，此时发送 `group_failed`，随后保留具体用例信息；文件诊断不增加失败用例计数。
+
 ## 快照与复用边界
 
 `snapshot --source DIR [--store DIR] [--exclude path1,path2]` 进行两轮内容核验，输出 `verified_copy` manifest。它不承诺文件系统原子快照，Focus 仍需提供合作写屏障。默认排除根目录的 `.git`、`.focus-test` 和源目录内的内容存储；不使用 Git ignore 自动省略测试数据。
@@ -98,14 +111,15 @@ go test ./...
 go build ./cmd/...
 python -m unittest discover -s integration/focus -v
 go run ./cmd/focus-test-bench --output benchmarks/latest.json
+go run ./cmd/focus-test-real-bench --repetitions 3 --revision <commit> --output benchmarks/real-node.json
 ```
 
 Windows 当前工具链未启用 CGO，race detector 由 Linux CI 配置覆盖。本机实际验证不代表远程 CI 已运行。Go 模块没有第三方依赖；pytest 是可选本地执行器及 CI 测试依赖。
 
-对照实验详见 [benchmarks](benchmarks/README.md)，现有数据仅用于验证模拟协调机制，不代表真实 Focus 或项目测试加速比例。
+对照实验详见 [benchmarks](benchmarks/README.md)。真实 Node 实验包含每个调用方的封存与同步证据落盘；另有真实 Focus 图配合本地脚本模型的反馈验证。两者都不代表生产 Patrol 或实际项目的加速比例。
 
 ## 实施状态
 
 [实施路线](docs/roadmap.md) 记录逐项状态。[设计基线](docs/design.md) 保留架构和证据约束。
 
-M0、M1 与 Node/pytest 本地适配已落地。M2 的自动保留清理、真实磁盘故障注入和跨平台实跑仍待完成。Focus 目前只有 [实验客户端和接入合同](integration/focus/README.md)，尚未修改 Focus 本体、建立受治理执行代理或验证模型消费。真实 Focus 验收与实负载收益实验仍在后续阶段。
+M0、M1、Node/pytest 本地适配及受限真实 Node 在途共享已落地。M2 的自动保留清理和真实磁盘故障注入仍待完成。Focus 已提供 [可选反馈中间件及真实图验证](integration/focus/README.md)：两个图的脚本模型在慢测试完成前读取失败，并记录精确 checkpoint 与模型返回回执。尚未安装进 Focus 生产工厂，受治理执行代理、工作区版本屏障及 ResultAdoption 验收仍未完成；不能将实验反馈结果当成 Focus 完成证据。

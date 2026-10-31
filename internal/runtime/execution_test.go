@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"focus-test-runtime/internal/protocol"
@@ -174,6 +175,13 @@ func TestBudgetExclusiveResourcesAndTimeouts(t *testing.T) {
 }
 
 func TestRequestExpiryDoesNotCancelOtherSubscriber(t *testing.T) {
+	// The bubble clock cannot advance while the test goroutine attaches both
+	// subscribers, including their synchronous journal commits. Real fsync and
+	// Windows scheduling latency must not consume A's logical waiting budget.
+	synctest.Test(t, testRequestExpiryDoesNotCancelOtherSubscriber)
+}
+
+func testRequestExpiryDoesNotCancelOtherSubscriber(t *testing.T) {
 	s, _, r := executionFixture(t, 1)
 	r.Plan.TestIDs = []string{"fixture.slow"}
 	r.RequestTimeoutMS = 20
@@ -190,6 +198,9 @@ func TestRequestExpiryDoesNotCancelOtherSubscriber(t *testing.T) {
 	if a.JobID != b.JobID {
 		t.Fatal("waiting deadline entered execution key")
 	}
+	synctest.Wait()
+	time.Sleep(20 * time.Millisecond)
+	synctest.Wait()
 	if result := waitResult(t, s, a.RequestID); result.Status != "expired" {
 		t.Fatalf("request did not expire: %+v", result)
 	}

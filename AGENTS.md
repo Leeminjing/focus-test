@@ -42,9 +42,11 @@ need justifies it and document that decision.
   not write Focus's database.
 - Update implementation status with each milestone. Do not present planned
   snapshot, persistence, deduplication, isolation, or sandbox capabilities as
-  already available. Real adapters currently require reuse_policy none because
-  external installed dependencies are not fully sealed. Unknown real cleanup
-  quarantines admission. Focus broker/adoption integration remains unfinished.
+  already available. General node-v1/pytest-v1 still require reuse_policy none.
+  Only opt-in node-sealed-v1 permits real inflight reuse under its documented
+  cooperative dependency contract. Do not expand that boundary implicitly.
+  Unknown real cleanup quarantines admission. Focus broker/adoption integration
+  remains unfinished; scripted graph feedback receipts are not acceptance.
 
 ## Verification
 
