@@ -11,11 +11,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
 const MaxRecord = 1 << 20
 const MaxJournal = 64 << 20
+
+var ErrCapacity = errors.New("journal capacity exhausted")
 
 type Record struct {
 	Version  int             `json:"version"`
@@ -26,12 +29,13 @@ type Record struct {
 }
 
 type Journal struct {
-	mu     sync.Mutex
-	file   *os.File
-	lock   *os.File
-	seq    int
-	size   int64
-	failed error
+	mu        sync.Mutex
+	file      *os.File
+	lock      *os.File
+	seq       int
+	size      int64
+	failed    error
+	directory string
 }
 
 // Open acquires a process-scoped OS lock before reading any execution records.
@@ -50,7 +54,7 @@ func Open(directory string) (*Journal, []Record, error) {
 		lock.Close()
 		return nil, nil, err
 	}
-	j := &Journal{file: f, lock: lock}
+	j := &Journal{file: f, lock: lock, directory: directory}
 	fail := func(err error) (*Journal, []Record, error) { j.Close(); return nil, nil, err }
 	info, err := f.Stat()
 	if err != nil || info.Size() > MaxJournal {
@@ -74,6 +78,24 @@ func Open(directory string) (*Journal, []Record, error) {
 		j.seq = record.Seq
 		records = append(records, record)
 	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fail(err)
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".pending-") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return fail(err)
+		}
+		if info.Mode().IsRegular() {
+			if err := os.Remove(filepath.Join(directory, entry.Name())); err != nil {
+				return fail(fmt.Errorf("abandoned checkpoint cleanup: %w", err))
+			}
+		}
+	}
 	return j, records, nil
 }
 
@@ -93,6 +115,19 @@ func readRecord(reader *bufio.Reader) ([]byte, error) {
 }
 
 func (j *Journal) Append(kind string, value any) error {
+	return j.append(kind, value, 0)
+}
+
+// AppendReserved applies backpressure before consuming settlement headroom.
+// Capacity rejection writes nothing and leaves existing records trustworthy.
+func (j *Journal) AppendReserved(kind string, value any, reserve int64) error {
+	if reserve < 0 || reserve > MaxJournal {
+		return errors.New("invalid journal reserve")
+	}
+	return j.append(kind, value, reserve)
+}
+
+func (j *Journal) append(kind string, value any, reserve int64) error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if j.failed != nil {
@@ -109,8 +144,15 @@ func (j *Journal) Append(kind string, value any) error {
 		return err
 	}
 	encoded = append(encoded, '\n')
-	if len(encoded) > MaxRecord || j.size+int64(len(encoded)) > MaxJournal {
+	if len(encoded) > MaxRecord {
 		j.failed = errors.New("evidence quota exceeded; stop admission")
+		return j.failed
+	}
+	if j.size+int64(len(encoded)) > MaxJournal-reserve {
+		if reserve > 0 {
+			return ErrCapacity
+		}
+		j.failed = ErrCapacity
 		return j.failed
 	}
 	n, err := j.file.Write(encoded)
@@ -132,12 +174,18 @@ func (j *Journal) Append(kind string, value any) error {
 func (j *Journal) Close() error {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if j.file == nil {
+	if j.file == nil && j.lock == nil {
 		return nil
 	}
-	err := j.file.Close()
-	lockErr := j.lock.Close()
+	var err, lockErr error
+	if j.file != nil {
+		err = j.file.Close()
+	}
+	if j.lock != nil {
+		lockErr = errors.Join(UnlockOperation(j.lock), j.lock.Close())
+	}
 	j.file = nil
+	j.lock = nil
 	j.failed = errors.New("journal closed")
 	return errors.Join(err, lockErr)
 }

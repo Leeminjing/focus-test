@@ -15,6 +15,10 @@ fallbacks. This transport does not provide Focus's execution authority.
 | GET | `/v1/requests/{id}` | Current/final subscriber result with original execution identity |
 | GET | `/v1/jobs/{id}` | Original job result, with no subscriber view overrides |
 | POST | `/v1/requests/{id}/cancel` | Idempotently remove only that subscriber |
+| POST | `/v1/jobs/{id}/references` | Retain original evidence using an opaque reference_id |
+| DELETE | `/v1/jobs/{id}/references/{reference_id}` | Release only that reference |
+| POST | `/v1/maintenance/collect` | Collect expired unreferenced settled evidence |
+| GET | `/v1/maintenance` | Retained counts, journal bytes and last collection error |
 | GET | `/v1/jobs/{id}/events?after_seq=N` | Strictly newer events, next cursor, terminal flag |
 | GET | `/v1/requests/{id}/logs?stream=stderr&offset=N` | Up to 64 KiB of log text, byte cursor |
 | POST | `/v1/fixture-jobs` | Backward-compatible unsealed built-in simulation submission |
@@ -136,7 +140,11 @@ remain inconclusive.
 Every transition is checksummed and synced before publication. The single state
 directory is OS-locked. Corrupt/truncated journals fail startup; quota/write
 failures stop publication. Retained requests are limited to 128, journal size to
-64 MiB, and each record to 1 MiB.
+64 MiB, and each record to 1 MiB. Automatic collection/compaction reclaims
+unreferenced settled evidence; active, referenced and unknown-cleanup evidence
+is protected. Idempotency ends when its retained request is evicted. Ordinary
+writes reserve 2 MiB for cancellation/settlement; capacity backpressure does
+not invalidate already committed records. See [retention semantics](../docs/retention.md).
 
 Restart never replays unfinished jobs. They become interrupted/inconclusive.
 Unknown cleanup on a real job quarantines new admission; an expired lease or
@@ -145,7 +153,8 @@ records remain available unless evidence itself is corrupt.
 
 Output files are polled against a 4 MiB limit and checked again at termination.
 Excess output cancels the process; a fast writer can overshoot the observed
-threshold. No automatic evidence eviction or store garbage collector exists yet.
+threshold. Snapshot collection shares an OS operation lock with sealing and
+materialization; newly sealed unbound inputs receive a configurable grace period.
 
 Windows processes start suspended, join a kill-on-close Job Object, and resume
 only after assignment. Cleanup waits for the active process count to reach zero.

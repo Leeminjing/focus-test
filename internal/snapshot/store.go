@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"focus-test-runtime/internal/evidence"
 	"io"
 	"io/fs"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 )
 
 const Version = 1
@@ -53,8 +55,9 @@ type Sealed struct {
 // Store's directory must be private to the runtime. Root guards path traversal;
 // content hashes detect accidental edits. It is not a hostile-user filesystem.
 type Store struct {
-	root *os.Root
-	path string
+	root       *os.Root
+	path       string
+	operations chan struct{}
 }
 
 func Open(directory string) (*Store, error) {
@@ -79,12 +82,19 @@ func Open(directory string) (*Store, error) {
 			return nil, err
 		}
 	}
-	return &Store{root: r, path: resolved}, nil
+	operations := make(chan struct{}, 1)
+	operations <- struct{}{}
+	return &Store{root: r, path: resolved, operations: operations}, nil
 }
 
 func (s *Store) Close() error { return s.root.Close() }
 
 func (s *Store) Seal(ctx context.Context, source string, excludes []string) (Sealed, error) {
+	lock, err := s.operationLock(ctx)
+	if err != nil {
+		return Sealed{}, err
+	}
+	defer lock.Close()
 	abs, err := filepath.Abs(source)
 	if err != nil {
 		return Sealed{}, err
@@ -134,6 +144,9 @@ func (s *Store) Seal(ctx context.Context, source string, excludes []string) (Sea
 	}
 	id := hash(encoded)
 	if err := s.put("manifests/"+id+".json", encoded); err != nil {
+		return Sealed{}, err
+	}
+	if err := s.root.Chtimes("manifests/"+id+".json", time.Now(), time.Now()); err != nil {
 		return Sealed{}, err
 	}
 	return Sealed{SnapshotID: "sha256:" + id, Manifest: first}, nil
@@ -237,6 +250,15 @@ func readStable(ctx context.Context, r *os.Root, name string, before fs.FileInfo
 }
 
 func (s *Store) Load(id string) (Sealed, error) {
+	lock, err := s.operationLock(context.Background())
+	if err != nil {
+		return Sealed{}, err
+	}
+	defer lock.Close()
+	return s.load(id)
+}
+
+func (s *Store) load(id string) (Sealed, error) {
 	key, err := digestKey(id)
 	if err != nil {
 		return Sealed{}, err
@@ -286,11 +308,40 @@ func (s *Store) Load(id string) (Sealed, error) {
 // Materialize creates a private writable copy beneath the store. The returned
 // directory never shares writable hard links with content objects or source.
 func (s *Store) Materialize(ctx context.Context, id string) (string, error) {
-	sealed, err := s.Load(id)
+	return s.materialize(ctx, id, "work/"+rand.Text())
+}
+
+// AttemptWorkspace returns a rooted execution identity before any directory
+// exists, so the runtime can durably reserve it before copying input files.
+func (s *Store) AttemptWorkspace(attemptID string) (string, error) {
+	if !strings.HasPrefix(attemptID, "attempt-") || len(attemptID) > 128 {
+		return "", errors.New("invalid attempt identity")
+	}
+	for _, c := range attemptID {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return "", errors.New("invalid attempt identity")
+		}
+	}
+	return filepath.Join(s.path, "work", attemptID), nil
+}
+
+func (s *Store) MaterializeAttempt(ctx context.Context, id, attemptID string) (string, error) {
+	if _, err := s.AttemptWorkspace(attemptID); err != nil {
+		return "", err
+	}
+	return s.materialize(ctx, id, "work/"+attemptID)
+}
+
+func (s *Store) materialize(ctx context.Context, id, name string) (string, error) {
+	lock, err := s.operationLock(ctx)
 	if err != nil {
 		return "", err
 	}
-	name := "work/" + rand.Text()
+	defer lock.Close()
+	sealed, err := s.load(id)
+	if err != nil {
+		return "", err
+	}
 	if err := s.root.Mkdir(name, 0700); err != nil {
 		return "", err
 	}
@@ -342,6 +393,37 @@ func (s *Store) Materialize(ctx context.Context, id string) (string, error) {
 	}
 	success = true
 	return filepath.Join(s.path, filepath.FromSlash(name)), nil
+}
+
+type operationGuard struct {
+	file    *os.File
+	release chan struct{}
+}
+
+func (g *operationGuard) Close() error {
+	err := evidence.UnlockOperation(g.file)
+	closeErr := g.file.Close()
+	g.release <- struct{}{}
+	return errors.Join(err, closeErr)
+}
+
+func (s *Store) operationLock(ctx context.Context) (*operationGuard, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.operations:
+	}
+	f, err := s.root.OpenFile("operations.lock", os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		s.operations <- struct{}{}
+		return nil, err
+	}
+	if err := evidence.LockOperation(ctx, f); err != nil {
+		f.Close()
+		s.operations <- struct{}{}
+		return nil, err
+	}
+	return &operationGuard{file: f, release: s.operations}, nil
 }
 
 // VerifyWorkspace checks the original declared inputs after execution. Generated

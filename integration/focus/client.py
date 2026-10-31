@@ -83,3 +83,9 @@ class RuntimeClient:
 
     def cancel(self, request_id):
         return self._call("POST", "/v1/requests/" + quote(request_id, safe="") + "/cancel")
+
+    def retain(self, job_id, reference_id):
+        return self._call("POST", "/v1/jobs/" + quote(job_id, safe="") + "/references", {"reference_id": reference_id})
+
+    def release(self, job_id, reference_id):
+        return self._call("DELETE", "/v1/jobs/" + quote(job_id, safe="") + "/references/" + quote(reference_id, safe=""))

@@ -259,6 +259,22 @@ func TestActiveStateRecoversAsInterruptedWithoutReplay(t *testing.T) {
 	}
 	recoveredConfig := config
 	recoveredConfig.StateDir = filepath.Join(t.TempDir(), "recovery")
+	// A copied crash prefix uses an independent content store. Two state
+	// owners must never garbage-collect each other's active snapshots.
+	recoveryStore, err := snapshot.Open(filepath.Join(t.TempDir(), "snapshots"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer recoveryStore.Close()
+	copySource, err := config.Snapshots.Materialize(context.Background(), r.SnapshotID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	copyInput, err := recoveryStore.Seal(context.Background(), copySource, nil)
+	if err != nil || copyInput.SnapshotID != r.SnapshotID {
+		t.Fatalf("copy snapshot identity: %+v %v", copyInput, err)
+	}
+	recoveredConfig.Snapshots = recoveryStore
 	if err := os.MkdirAll(recoveredConfig.StateDir, 0700); err != nil {
 		t.Fatal(err)
 	}

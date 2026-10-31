@@ -41,17 +41,20 @@ type Config struct {
 	CPUUnits  int
 	MemoryMiB int
 	Runner    *runner.Provider
+	Retention RetentionPolicy
 }
 
 type job struct {
-	ID      string                    `json:"id"`
-	Key     string                    `json:"key"`
-	Spec    protocol.ExecutionRequest `json:"spec"`
-	Legacy  bool                      `json:"legacy"`
-	Created time.Time                 `json:"created"`
-	Result  protocol.ExecutionResult  `json:"result"`
-	Events  []protocol.Event          `json:"events"`
-	cancel  context.CancelFunc
+	ID         string                    `json:"id"`
+	Key        string                    `json:"key"`
+	Spec       protocol.ExecutionRequest `json:"spec"`
+	Legacy     bool                      `json:"legacy"`
+	Created    time.Time                 `json:"created"`
+	Result     protocol.ExecutionResult  `json:"result"`
+	Events     []protocol.Event          `json:"events"`
+	Finished   time.Time                 `json:"finished,omitempty"`
+	References map[string]bool           `json:"references,omitempty"`
+	cancel     context.CancelFunc
 }
 
 type requestState struct {
@@ -80,24 +83,29 @@ type change struct {
 	Summary         *runner.Outcome      `json:"summary,omitempty"`
 	Workspace       string               `json:"workspace,omitempty"`
 	Diagnostic      string               `json:"diagnostic,omitempty"`
+	At              time.Time            `json:"at,omitempty"`
+	Reference       string               `json:"reference,omitempty"`
 }
 
 type Service struct {
-	mu          sync.Mutex
-	jobs        map[string]*job
-	requests    map[string]*requestState
-	keys        map[string]string
-	inflight    map[string]string
-	queue       []string
-	lastCaller  string
-	config      Config
-	journal     *evidence.Journal
-	ctx         context.Context
-	cancel      context.CancelFunc
-	wg          sync.WaitGroup
-	closed      bool
-	fatal       error
-	quarantined bool
+	mu               sync.Mutex
+	jobs             map[string]*job
+	requests         map[string]*requestState
+	keys             map[string]string
+	inflight         map[string]string
+	queue            []string
+	lastCaller       string
+	config           Config
+	journal          *evidence.Journal
+	ctx              context.Context
+	cancel           context.CancelFunc
+	wg               sync.WaitGroup
+	closed           bool
+	fatal            error
+	quarantined      bool
+	nextCollection   time.Time
+	lastCompactSize  int64
+	maintenanceError string
 }
 
 func New() *Service {
@@ -109,6 +117,9 @@ func New() *Service {
 }
 
 func Open(config Config) (*Service, error) {
+	if err := config.Retention.defaults(); err != nil {
+		return nil, err
+	}
 	if config.CPUUnits == 0 {
 		config.CPUUnits = 1
 	}
@@ -128,7 +139,22 @@ func Open(config Config) (*Service, error) {
 			return nil, err
 		}
 		s.journal = journal
+		if config.Snapshots != nil {
+			if err := config.Snapshots.Claim(config.StateDir); err != nil {
+				journal.Close()
+				cancel()
+				return nil, err
+			}
+		}
 		for _, record := range records {
+			if record.Kind != "transition" {
+				if err := s.restore(record); err != nil {
+					journal.Close()
+					cancel()
+					return nil, err
+				}
+				continue
+			}
 			var c change
 			if record.Kind != "transition" || json.Unmarshal(record.Data, &c) != nil {
 				journal.Close()
@@ -232,7 +258,12 @@ func (s *Service) submit(spec protocol.ExecutionRequest, legacy bool) (protocol.
 		return protocol.Binding{RequestID: prior.ID, JobID: prior.JobID, AttemptID: s.jobs[prior.JobID].Result.AttemptID}, nil
 	}
 	if len(s.requests) >= MaxJobs {
-		return protocol.Binding{}, ErrCapacity
+		if _, err := s.collectLocked(time.Now(), true, nil); err != nil {
+			return protocol.Binding{}, err
+		}
+		if len(s.requests) >= MaxJobs {
+			return protocol.Binding{}, ErrCapacity
+		}
 	}
 	if s.quarantined {
 		return protocol.Binding{}, ErrCleanup
@@ -480,6 +511,13 @@ func (s *Service) expire() {
 					}
 				}
 				s.drain()
+				if s.nextCollection.IsZero() {
+					s.nextCollection = now.Add(s.config.Retention.Interval)
+				}
+				if !now.Before(s.nextCollection) {
+					_, _ = s.collectLocked(now, false, nil)
+					s.nextCollection = now.Add(s.config.Retention.Interval)
+				}
 			}
 			s.mu.Unlock()
 		}
@@ -543,6 +581,9 @@ func (s *Service) drain() {
 		s.queue = append(s.queue[:chosen], s.queue[chosen+1:]...)
 		j := s.jobs[id]
 		if err := s.commit(change{Kind: "started", JobID: id, AttemptID: "attempt-" + rand.Text()}); err != nil {
+			if errors.Is(err, ErrCapacity) {
+				_ = s.commit(change{Kind: "finished", JobID: id, ExecutionStatus: "infrastructure_error", Diagnostic: "journal capacity exhausted before execution"})
+			}
 			return
 		}
 		s.lastCaller = callerScope(j.Spec)
@@ -557,12 +598,15 @@ func (s *Service) run(ctx context.Context, j *job) {
 	workspace := ""
 	var summary *runner.Outcome
 	if !j.Legacy {
-		workspace, err = s.config.Snapshots.Materialize(ctx, j.Spec.SnapshotID)
+		workspace, err = s.config.Snapshots.AttemptWorkspace(j.Result.AttemptID)
 	}
 	if err == nil && workspace != "" {
 		s.mu.Lock()
 		err = s.commit(change{Kind: "workspace", JobID: j.ID, Workspace: workspace})
 		s.mu.Unlock()
+	}
+	if err == nil && !j.Legacy {
+		_, err = s.config.Snapshots.MaterializeAttempt(ctx, j.Spec.SnapshotID, j.Result.AttemptID)
 	}
 	if err == nil && j.Spec.Plan.Adapter == "fixture-v1" {
 		err = fixture.Run(ctx, j.Spec.Plan.TestIDs, func(kind, id string) {
@@ -611,8 +655,21 @@ func (s *Service) commit(c change) error {
 	if s.fatal != nil {
 		return s.fatal
 	}
+	c.At = time.Now().UTC()
 	if s.journal != nil {
-		if err := s.journal.Append("transition", c); err != nil {
+		if s.journal.Size() > evidence.MaxJournal*3/4 {
+			if _, err := s.collectLocked(time.Now(), true, &c); err != nil {
+				return err
+			}
+		}
+		reserve := int64(2 << 20)
+		if c.Kind == "finished" || c.Kind == "detached" || (c.Kind == "reference" && c.Status == "released") {
+			reserve = 0
+		}
+		if err := s.journal.AppendReserved("transition", c, reserve); err != nil {
+			if errors.Is(err, evidence.ErrCapacity) && reserve > 0 {
+				return ErrCapacity
+			}
 			s.fatal = fmt.Errorf("evidence_unavailable: %w", err)
 			s.cancel()
 			return s.fatal
@@ -628,6 +685,21 @@ func (s *Service) commit(c change) error {
 
 func (s *Service) apply(c change) error {
 	switch c.Kind {
+	case "reference":
+		j := s.jobs[c.JobID]
+		if j == nil {
+			return ErrNotFound
+		}
+		if j.References == nil {
+			j.References = map[string]bool{}
+		}
+		if c.Status == "pinned" {
+			j.References[c.Reference] = true
+		} else if c.Status == "released" {
+			delete(j.References, c.Reference)
+		} else {
+			return errors.New("invalid reference transition")
+		}
 	case "submitted":
 		if c.Request == nil || c.Request.ID == "" || s.requests[c.Request.ID] != nil {
 			return errors.New("invalid request transition")
@@ -703,6 +775,10 @@ func (s *Service) apply(c change) error {
 				return errors.New("duplicate terminal transition")
 			}
 			j.Result.Status, j.Result.ExecutionStatus = "completed", c.ExecutionStatus
+			j.Finished = c.At
+			if j.Finished.IsZero() {
+				j.Finished = j.Created
+			}
 			j.Result.Outcome, j.Result.CleanupStatus = "inconclusive", "confirmed"
 			if c.Workspace != "" {
 				j.Result.Workspace = c.Workspace

@@ -24,6 +24,13 @@ need justifies it and document that decision.
   declared-input verification. Use its rooted operations, not ad hoc path joins.
 - `internal/evidence` owns durable checksummed records and the state-directory
   OS lock. Commit before publishing; failed storage stops trustworthy results.
+- Event reads must remain bounded in both count and encoded bytes; next_seq
+  acknowledges only returned events. Feedback cursors and observations commit
+  atomically per subscriber.
+- Retention must checkpoint before deleting files. Never collect active,
+  referenced, pending-publication or cleanup-unknown evidence. Snapshot sealing,
+  materialization and collection share the store's operation lock and input
+  grace; independent state owners cannot share a garbage-collected store.
 - `internal/runner` owns supported process providers, environment validation,
   adapter report validation and process-tree cleanup. Never silently fall back
   from focus-broker or network-denied policies to host execution.

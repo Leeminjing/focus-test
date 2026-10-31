@@ -90,3 +90,32 @@ func TestEventPaginationOverHTTP(t *testing.T) {
 		}
 	}
 }
+
+func TestEvidenceReferenceRoutes(t *testing.T) {
+	s := runtime.New()
+	defer s.Close()
+	b, err := s.Submit(protocol.FixtureRequest{ProtocolVersion: 1, IdempotencyKey: "retain", TestIDs: []string{"fixture.slow"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := server.Authorized(s, strings.Repeat("a", 32))
+	for _, tc := range []struct {
+		method, path, body string
+		status             int
+	}{
+		{"POST", "/v1/jobs/" + b.JobID + "/references", `{"reference_id":"focus-adoption-A"}`, 200},
+		{"POST", "/v1/jobs/" + b.JobID + "/references", `{"reference_id":"focus-adoption-A"}`, 200},
+		{"POST", "/v1/jobs/" + b.JobID + "/references", `{"reference_id":" "}`, 400},
+		{"DELETE", "/v1/jobs/" + b.JobID + "/references/focus-adoption-A", "", 200},
+		{"POST", "/v1/jobs/unknown/references", `{"reference_id":"focus-adoption-A"}`, 404},
+		{"POST", "/v1/maintenance/collect", "", 200},
+	} {
+		req := httptest.NewRequest(tc.method, tc.path, strings.NewReader(tc.body))
+		req.Header.Set("Authorization", "Bearer "+strings.Repeat("a", 32))
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, req)
+		if response.Code != tc.status {
+			t.Fatalf("%s %s: %d %s", tc.method, tc.path, response.Code, response.Body.String())
+		}
+	}
+}
