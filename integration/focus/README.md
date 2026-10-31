@@ -26,6 +26,16 @@ contain their typed source; the prepared request manifest and actual model
 input must also include it. Only a returned model response writes a response
 receipt. A prepared checkpoint or UI notification alone is not consumption.
 
+Each request now has its own durable event cursor and drained-terminal marker.
+Page validation, first-failure/final notices and cursor advancement commit in
+one SQLite transaction. Failed commits replay from the old cursor; concurrent
+stale readers refetch rather than overwrite newer progress. Completed streams
+are not fetched again. Model preparation drains at most 32 pages per subscriber
+per call and resumes any remaining tail next time. A saved notice survives a
+crash between cursor advancement and graph checkpoint publication. Already
+acknowledged retained notices are not reannounced; rollback can reinject a
+notice absent from the restored history.
+
 `verify_feedback.py` exercises upstream Focus's actual `WorldStateMiddleware`,
 `TypedHistoryMiddleware`, security-context derivation and graph checkpoint
 saver. Two independently routed graphs subscribe to one real node-sealed-v1
