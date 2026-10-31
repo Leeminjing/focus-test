@@ -55,9 +55,10 @@ class RuntimeFeedbackMiddleware(AgentMiddleware):
         for binding in self.store.bindings(owner):
             # Until the durable per-subscriber cursor is installed, drain all
             # bounded pages so introducing pagination cannot hide a late failure.
-            pages = await asyncio.to_thread(lambda: list(self.client.event_pages(binding["job_id"], 0)))
-            for page in pages:
-                self.store.observe(binding, page["events"])
+            def observe_available():
+                for page in self.client.event_pages(binding["job_id"], 0):
+                    self.store.observe(binding, page["events"])
+            await asyncio.to_thread(observe_available)
             for identity, observation in self.store.notices(binding):
                 pending.append(identity)
                 if identity not in retained:
