@@ -1,0 +1,259 @@
+{
+  "source_revision": "00e5518fe3d66043dabb4e8d8acf931cc696c2e9",
+  "os": "windows",
+  "arch": "amd64",
+  "go_version": "go1.26.5",
+  "node_version": "v24.14.0",
+  "adapter": "node-sealed-v1",
+  "cpu_units": 2,
+  "memory_mib": 512,
+  "samples": [
+    {
+      "contexts": 1,
+      "repetition": 1,
+      "reuse": "none",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 4.916,
+      "first_durable_failure_read_ms": 230.085,
+      "completion_including_seals_and_journal_ms": 1293
+    },
+    {
+      "contexts": 1,
+      "repetition": 1,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 2.999,
+      "first_durable_failure_read_ms": 222.372,
+      "completion_including_seals_and_journal_ms": 1300.03
+    },
+    {
+      "contexts": 2,
+      "repetition": 1,
+      "reuse": "none",
+      "executed_jobs": 2,
+      "executed_attempts": 2,
+      "total_seal_ms": 6.644,
+      "first_durable_failure_read_ms": 263.527,
+      "completion_including_seals_and_journal_ms": 1401.706
+    },
+    {
+      "contexts": 2,
+      "repetition": 1,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 5.989,
+      "first_durable_failure_read_ms": 255.075,
+      "completion_including_seals_and_journal_ms": 1318.881
+    },
+    {
+      "contexts": 4,
+      "repetition": 1,
+      "reuse": "none",
+      "executed_jobs": 4,
+      "executed_attempts": 4,
+      "total_seal_ms": 9.566,
+      "first_durable_failure_read_ms": 277.633,
+      "completion_including_seals_and_journal_ms": 2655.337
+    },
+    {
+      "contexts": 4,
+      "repetition": 1,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 9.898,
+      "first_durable_failure_read_ms": 244.448,
+      "completion_including_seals_and_journal_ms": 1307.325
+    },
+    {
+      "contexts": 8,
+      "repetition": 1,
+      "reuse": "none",
+      "executed_jobs": 8,
+      "executed_attempts": 8,
+      "total_seal_ms": 16.276,
+      "first_durable_failure_read_ms": 530.843,
+      "completion_including_seals_and_journal_ms": 5157.415
+    },
+    {
+      "contexts": 8,
+      "repetition": 1,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 19.618000000000002,
+      "first_durable_failure_read_ms": 501.616,
+      "completion_including_seals_and_journal_ms": 1305.019
+    },
+    {
+      "contexts": 1,
+      "repetition": 2,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 3.778,
+      "first_durable_failure_read_ms": 245.441,
+      "completion_including_seals_and_journal_ms": 1321.15
+    },
+    {
+      "contexts": 1,
+      "repetition": 2,
+      "reuse": "none",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 4.5,
+      "first_durable_failure_read_ms": 257.022,
+      "completion_including_seals_and_journal_ms": 1324.295
+    },
+    {
+      "contexts": 2,
+      "repetition": 2,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 6.254,
+      "first_durable_failure_read_ms": 258.085,
+      "completion_including_seals_and_journal_ms": 1347.647
+    },
+    {
+      "contexts": 2,
+      "repetition": 2,
+      "reuse": "none",
+      "executed_jobs": 2,
+      "executed_attempts": 2,
+      "total_seal_ms": 8.246,
+      "first_durable_failure_read_ms": 310.405,
+      "completion_including_seals_and_journal_ms": 1457.573
+    },
+    {
+      "contexts": 4,
+      "repetition": 2,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 11.037,
+      "first_durable_failure_read_ms": 292.141,
+      "completion_including_seals_and_journal_ms": 1367.268
+    },
+    {
+      "contexts": 4,
+      "repetition": 2,
+      "reuse": "none",
+      "executed_jobs": 4,
+      "executed_attempts": 4,
+      "total_seal_ms": 11.916,
+      "first_durable_failure_read_ms": 305.736,
+      "completion_including_seals_and_journal_ms": 2715.968
+    },
+    {
+      "contexts": 8,
+      "repetition": 2,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 16.557,
+      "first_durable_failure_read_ms": 553.137,
+      "completion_including_seals_and_journal_ms": 1347.306
+    },
+    {
+      "contexts": 8,
+      "repetition": 2,
+      "reuse": "none",
+      "executed_jobs": 8,
+      "executed_attempts": 8,
+      "total_seal_ms": 16.924,
+      "first_durable_failure_read_ms": 544.593,
+      "completion_including_seals_and_journal_ms": 5255.237
+    },
+    {
+      "contexts": 1,
+      "repetition": 3,
+      "reuse": "none",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 1.72,
+      "first_durable_failure_read_ms": 238.404,
+      "completion_including_seals_and_journal_ms": 1312.876
+    },
+    {
+      "contexts": 1,
+      "repetition": 3,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 4.022,
+      "first_durable_failure_read_ms": 236.718,
+      "completion_including_seals_and_journal_ms": 1312.915
+    },
+    {
+      "contexts": 2,
+      "repetition": 3,
+      "reuse": "none",
+      "executed_jobs": 2,
+      "executed_attempts": 2,
+      "total_seal_ms": 6.35,
+      "first_durable_failure_read_ms": 264.431,
+      "completion_including_seals_and_journal_ms": 1430.44
+    },
+    {
+      "contexts": 2,
+      "repetition": 3,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 12.066,
+      "first_durable_failure_read_ms": 315.224,
+      "completion_including_seals_and_journal_ms": 1396.415
+    },
+    {
+      "contexts": 4,
+      "repetition": 3,
+      "reuse": "none",
+      "executed_jobs": 4,
+      "executed_attempts": 4,
+      "total_seal_ms": 10.978999999999997,
+      "first_durable_failure_read_ms": 297.631,
+      "completion_including_seals_and_journal_ms": 2718.945
+    },
+    {
+      "contexts": 4,
+      "repetition": 3,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 8.465,
+      "first_durable_failure_read_ms": 283.368,
+      "completion_including_seals_and_journal_ms": 1352.944
+    },
+    {
+      "contexts": 8,
+      "repetition": 3,
+      "reuse": "none",
+      "executed_jobs": 8,
+      "executed_attempts": 8,
+      "total_seal_ms": 17.895999999999997,
+      "first_durable_failure_read_ms": 582.87,
+      "completion_including_seals_and_journal_ms": 5332.359
+    },
+    {
+      "contexts": 8,
+      "repetition": 3,
+      "reuse": "inflight",
+      "executed_jobs": 1,
+      "executed_attempts": 1,
+      "total_seal_ms": 20.494999999999997,
+      "first_durable_failure_read_ms": 605.522,
+      "completion_including_seals_and_journal_ms": 1391.106
+    }
+  ],
+  "limits": [
+    "self-contained real Node assertion plus 1-second timer, not a production application workload",
+    "each caller seals inputs; synchronous journal commits included",
+    "polling failure delivery to benchmark client; Focus model consumption measured separately",
+    "new content store per cell, OS disk cache not flushed",
+    "no CPU-time, RSS, persistent cache or statistical tail claim"
+  ]
+}

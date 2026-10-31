@@ -44,3 +44,21 @@ hashes. Seal cost is separate; model times start at submission after graph
 setup. Runtime/feedback storage is durable, graph checkpoints use InMemorySaver.
 This is not installed production Patrol or acceptance evidence. See the
 [reproduction instructions](../integration/focus/README.md).
+
+Recorded Windows samples at `00e5518` (Node 24.14.0), medians of three runs:
+
+| Callers | Jobs without reuse / shared | Complete without reuse (ms) | Shared (ms) |
+| --- | --- | --- | --- |
+| 1 | 1 / 1 | 1312.876 | 1312.915 |
+| 2 | 2 / 1 | 1430.440 | 1347.647 |
+| 4 | 4 / 1 | 2715.968 | 1352.944 |
+| 8 | 8 / 1 | 5255.237 | 1347.306 |
+
+This workload demonstrates actual execution reduction with sealing and fsync
+included. At one caller, sharing has no advantage; gains depend on overlap and
+duplicate load. These values do not predict production Focus acceleration.
+The separate Focus graph sample observed its two returned-response calls at
+285.8 / 317.8 ms after submission while the job was running; complete result
+arrived at 3409.7 ms. A deliberately failed model call produced no response
+receipt; retry produced a verified receipt. See raw JSON for all identities,
+source revisions, limits and individual samples.

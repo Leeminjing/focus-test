@@ -1,0 +1,71 @@
+{
+  "focus_revision": "853969375f9df46936552809dce3d543dd2403e4",
+  "focus_test_revision": "00e5518fe3d66043dabb4e8d8acf931cc696c2e9",
+  "node_version": "v24.14.0",
+  "python_version": "3.12.10 (tags/v3.12.10:0cc8128, Apr  8 2025, 12:21:36) [MSC v.1943 64 bit (AMD64)]",
+  "langchain_version": "1.3.10",
+  "langgraph_version": "1.2.6",
+  "mode": "local-process",
+  "model": "scripted local GenericFakeChatModel",
+  "focus_graph": "upstream WorldStateMiddleware + TypedHistoryMiddleware",
+  "acceptance": false,
+  "production_focus_installed": false,
+  "snapshot_seal_ms": 6.847,
+  "requests": [
+    {
+      "request_id": "request-AIA4KZ3WZCOHSEG4FFBR7IDVLC",
+      "job_id": "job-OKUGDKI3GON732PNRGLO4MKY6O",
+      "attempt_id": "attempt-FRP6DLJDAF3RYUY7G3SLJASV5E",
+      "mode": "local-process"
+    },
+    {
+      "request_id": "request-DK3X5ZCP6LXY3XTCY2NCLI4EII",
+      "job_id": "job-OKUGDKI3GON732PNRGLO4MKY6O",
+      "attempt_id": "attempt-FRP6DLJDAF3RYUY7G3SLJASV5E",
+      "mode": "local-process"
+    }
+  ],
+  "executed_attempts": 1,
+  "models": [
+    {
+      "run_id": "run-context-0",
+      "job_id": "job-OKUGDKI3GON732PNRGLO4MKY6O",
+      "event_seq": 3,
+      "job_status_at_model": "running",
+      "consumed_ms": 285.7756999992489,
+      "notice_id": "test-runtime:f35f026d9ba31c3afb0adf261da69c986fa93af42ba6fff9445b1abd30c45053",
+      "next_action": "inspect_failed_test"
+    },
+    {
+      "run_id": "run-context-1",
+      "job_id": "job-OKUGDKI3GON732PNRGLO4MKY6O",
+      "event_seq": 3,
+      "job_status_at_model": "running",
+      "consumed_ms": 317.8035999999338,
+      "notice_id": "test-runtime:20a79a781bfc72997ded82ec9ac22c5e4a3426957bd70d40bcf7eec6063a3d1e",
+      "next_action": "inspect_failed_test"
+    }
+  ],
+  "response_receipts": [
+    {
+      "notice_id": "test-runtime:f35f026d9ba31c3afb0adf261da69c986fa93af42ba6fff9445b1abd30c45053",
+      "checkpoint_id": "1f1d4d5e-6bec-650d-800b-0916f53bf77c",
+      "response_hash": "8b2f5e269b9a0a8f9e1a96640c60e2dd65c608c43f63721a2fdbbc6441367fa9"
+    },
+    {
+      "notice_id": "test-runtime:20a79a781bfc72997ded82ec9ac22c5e4a3426957bd70d40bcf7eec6063a3d1e",
+      "checkpoint_id": "1f1d4d5e-6c22-6e64-800b-8092f7e7ab3c",
+      "response_hash": "df17bf1fa09a05c823c5770fd93ddb4bd64b1c9bacf02aa8f9cc0f5c61ccd42e"
+    }
+  ],
+  "completion_ms": 3409.7351000000344,
+  "outcome": "failed",
+  "baseline_action": "continue_waiting",
+  "failure_action": "inspect_failed_test",
+  "failed_model_call_had_no_response_receipt": true,
+  "limits": [
+    "actual Focus graph, scripted model; not a production Patrol ContextRunPool run",
+    "in-memory graph checkpoints, durable runtime and feedback journals",
+    "Focus execution broker, revision fencing and acceptance adoption remain unimplemented"
+  ]
+}
