@@ -94,9 +94,12 @@ async def verify(args):
     if bindings[0]["job_id"] != bindings[1]["job_id"] or bindings[0]["request_id"] == bindings[1]["request_id"]:
         raise AssertionError("two Focus request bindings did not share one job")
     deadline = time.perf_counter() + 15
+    cursor, failed = 0, False
     while time.perf_counter() < deadline:
-        page = client.events(bindings[0]["job_id"])
-        if any(event["kind"] in ("case_failed", "group_failed") for event in page["events"]):
+        for page in client.event_pages(bindings[0]["job_id"], cursor):
+            cursor = page["next_seq"]
+            failed = failed or any(event["kind"] in ("case_failed", "group_failed") for event in page["events"])
+        if failed:
             break
         await asyncio.sleep(.005)
     else:
@@ -126,7 +129,7 @@ async def verify(args):
         await asyncio.sleep(.01)
     if result["outcome"] != "failed" or result["report_status"] != "complete" or result["cleanup_status"] != "confirmed":
         raise AssertionError(f"shared real test did not settle correctly: {result}")
-    events = client.events(bindings[0]["job_id"])["events"]
+    events = [event for page in client.event_pages(bindings[0]["job_id"]) for event in page["events"]]
     starts = sum(event["kind"] == "attempt_started" for event in events)
     if starts != 1:
         raise AssertionError("shared request launched multiple attempts")

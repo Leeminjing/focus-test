@@ -28,7 +28,7 @@ func TestUpstreamFocusConsumesRealFailureBeforeSlowTestEnds(t *testing.T) {
 	}
 	source := t.TempDir()
 	dataDir := t.TempDir()
-	contents := `const {test}=require('node:test');const assert=require('node:assert/strict');test('parallel',{concurrency:2},async t=>{await Promise.all([t.test('slow declared first',async()=>{await new Promise(r=>setTimeout(r,3000));}),t.test('fast real assertion',()=>assert.equal(2+2,5))]);});`
+	contents := `const {test}=require('node:test');const assert=require('node:assert/strict');for(let i=0;i<200;i++)test('prior pass '+i,()=>{});test('parallel',{concurrency:2},async t=>{await Promise.all([t.test('slow declared first',async()=>{await new Promise(r=>setTimeout(r,3000));}),t.test('fast real assertion',()=>assert.equal(2+2,5))]);});`
 	if err := os.WriteFile(filepath.Join(source, "sample.test.cjs"), []byte(contents), 0600); err != nil {
 		t.Fatal(err)
 	}
