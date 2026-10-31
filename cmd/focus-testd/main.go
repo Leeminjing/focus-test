@@ -38,6 +38,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	cpu := flags.Int("cpu-units", 2, "CPU admission budget")
 	memory := flags.Int("memory-mib", 1024, "memory admission budget")
 	adapterDir := flags.String("adapter-dir", "adapters", "versioned local adapter script directory")
+	retention := flags.Duration("retention", 24*time.Hour, "maximum age of unreferenced settled evidence")
+	minimum := flags.Duration("minimum-retention", time.Minute, "minimum age before pressure eviction")
+	interval := flags.Duration("collection-interval", time.Minute, "automatic collection interval")
+	inputGrace := flags.Duration("input-grace", 15*time.Minute, "grace for newly sealed unbound inputs and orphan workspaces")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -46,6 +50,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	}
 	if flags.NArg() != 0 {
 		return errors.New("unexpected positional arguments")
+	}
+	if *retention <= 0 || *minimum <= 0 || *interval <= 0 || *inputGrace <= 0 {
+		return errors.New("retention durations must be positive")
 	}
 	if err := localnet.ValidateAddress(*address); err != nil {
 		return err
@@ -64,7 +71,8 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	service, err := runtime.Open(runtime.Config{Snapshots: store, StateDir: filepath.Join(*dataDir, "state"), CPUUnits: *cpu, MemoryMiB: *memory, Runner: provider})
+	service, err := runtime.Open(runtime.Config{Snapshots: store, StateDir: filepath.Join(*dataDir, "state"), CPUUnits: *cpu, MemoryMiB: *memory, Runner: provider,
+		Retention: runtime.RetentionPolicy{MaxAge: *retention, MinimumAge: *minimum, Interval: *interval, InputGrace: *inputGrace}})
 	if err != nil {
 		return err
 	}

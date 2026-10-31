@@ -5,6 +5,7 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 const Version = 1
@@ -85,6 +86,17 @@ const MaxEventPageBytes = 256 << 10
 type EventQuery struct {
 	AfterSeq int
 	Limit    int
+}
+
+type ReferenceRequest struct {
+	ReferenceID string `json:"reference_id"`
+}
+
+func (r ReferenceRequest) Validate() error {
+	if len(r.ReferenceID) > 256 || strings.TrimSpace(r.ReferenceID) == "" || strings.ContainsRune(r.ReferenceID, '\x00') {
+		return errors.New("reference_id must contain 1..256 nonempty bytes")
+	}
+	return nil
 }
 
 func (q EventQuery) Validate() error {

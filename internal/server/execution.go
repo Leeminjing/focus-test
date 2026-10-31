@@ -12,6 +12,40 @@ import (
 )
 
 func registerExecutionRoutes(mux *http.ServeMux, service *runtime.Service) {
+	mux.HandleFunc("POST /v1/jobs/{job}/references", func(w http.ResponseWriter, r *http.Request) {
+		var request protocol.ReferenceRequest
+		if !decodeRequest(w, r, &request) {
+			return
+		}
+		if err := request.Validate(); err != nil {
+			writeError(w, 400, "invalid_reference", err)
+			return
+		}
+		if err := service.Reference(r.PathValue("job"), request.ReferenceID, true); err != nil {
+			runtimeError(w, err)
+			return
+		}
+		write(w, 200, map[string]bool{"retained": true})
+	})
+	mux.HandleFunc("DELETE /v1/jobs/{job}/references/{reference}", func(w http.ResponseWriter, r *http.Request) {
+		if err := (protocol.ReferenceRequest{ReferenceID: r.PathValue("reference")}).Validate(); err != nil {
+			writeError(w, 400, "invalid_reference", err)
+			return
+		}
+		if err := service.Reference(r.PathValue("job"), r.PathValue("reference"), false); err != nil {
+			runtimeError(w, err)
+			return
+		}
+		write(w, 200, map[string]bool{"released": true})
+	})
+	mux.HandleFunc("POST /v1/maintenance/collect", func(w http.ResponseWriter, r *http.Request) {
+		result, err := service.Collect()
+		if err != nil {
+			runtimeError(w, err)
+			return
+		}
+		write(w, 200, result)
+	})
 	mux.HandleFunc("GET /v1/jobs/{job}", func(w http.ResponseWriter, r *http.Request) {
 		result, err := service.JobResult(r.PathValue("job"))
 		if err != nil {
