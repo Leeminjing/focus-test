@@ -96,6 +96,15 @@ bounded diagnostic. The reader is polling JSON, not JSONL streaming. Cursor zero
 reads history; future/negative/malformed cursors are rejected. The journal's own
 global sequence is separate from the public per-job sequence.
 
+Event reads accept `limit=1..256` (default 128) and cap the encoded response at
+256 KiB, including JSON escaping. A page may contain fewer than `limit` events.
+`next_seq` is the last event actually returned, or the incoming cursor for an
+empty page. `has_more` means another page is immediately available. `terminal`
+becomes true only when the job has settled AND this page drains its retained
+events. Continue from `next_seq`; never replace it with a job high-water mark.
+The Go default reader is bounded too. Python `event_pages` drains available
+pages; the 1 MiB transport response cap remains in force.
+
 Real adapters use a separate JSONL file with strict version/sequence and a final
 report closure. Early `case_failed` is diagnostic; final `case_finished` counts
 the case once after phase accounting. Duplicate/malformed/incomplete reports,

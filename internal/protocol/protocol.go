@@ -75,6 +75,23 @@ type EventPage struct {
 	Events          []Event `json:"events"`
 	NextSeq         int     `json:"next_seq"`
 	Terminal        bool    `json:"terminal"`
+	HasMore         bool    `json:"has_more"`
+}
+
+const DefaultEventLimit = 128
+const MaxEventLimit = 256
+const MaxEventPageBytes = 256 << 10
+
+type EventQuery struct {
+	AfterSeq int
+	Limit    int
+}
+
+func (q EventQuery) Validate() error {
+	if q.AfterSeq < 0 || q.Limit < 1 || q.Limit > MaxEventLimit {
+		return errors.New("event cursor must be nonnegative and limit must be 1..256")
+	}
+	return nil
 }
 
 type Error struct {

@@ -115,6 +115,7 @@ func decodeRequest(w http.ResponseWriter, r *http.Request, value any) bool {
 func eventHandler(service *runtime.Service) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		after := 0
+		limit := protocol.DefaultEventLimit
 		if value := r.URL.Query().Get("after_seq"); value != "" {
 			var err error
 			after, err = strconv.Atoi(value)
@@ -123,13 +124,21 @@ func eventHandler(service *runtime.Service) http.HandlerFunc {
 				return
 			}
 		}
-		page, err := service.Events(r.PathValue("job"), after)
+		if value, supplied := r.URL.Query()["limit"]; supplied {
+			var err error
+			if len(value) != 1 {
+				writeError(w, 400, "invalid_event_query", runtime.ErrEventQuery)
+				return
+			}
+			limit, err = strconv.Atoi(value[0])
+			if err != nil {
+				writeError(w, 400, "invalid_event_query", runtime.ErrEventQuery)
+				return
+			}
+		}
+		page, err := service.ReadEvents(r.PathValue("job"), protocol.EventQuery{AfterSeq: after, Limit: limit})
 		if err != nil {
 			runtimeError(w, err)
-			return
-		}
-		if after > page.NextSeq {
-			writeError(w, 400, "invalid_cursor", errors.New("after_seq is ahead of this job"))
 			return
 		}
 		write(w, http.StatusOK, page)
@@ -151,6 +160,8 @@ func runtimeError(w http.ResponseWriter, err error) {
 		status, code = 400, "snapshot_unavailable"
 	case errors.Is(err, runtime.ErrCapacity):
 		status, code = 503, "capacity_exhausted"
+	case errors.Is(err, runtime.ErrEventQuery):
+		status, code = 400, "invalid_event_query"
 	}
 	writeError(w, status, code, err)
 }

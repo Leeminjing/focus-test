@@ -61,10 +61,25 @@ class RuntimeClient:
     def original_result(self, job_id):
         return self._call("GET", "/v1/jobs/" + quote(job_id, safe=""))
 
-    def events(self, job_id, after_seq=0):
-        if not isinstance(after_seq, int) or after_seq < 0:
+    def events(self, job_id, after_seq=0, limit=128):
+        if type(after_seq) is not int or after_seq < 0:
             raise ValueError("cursor must be nonnegative")
-        return self._call("GET", "/v1/jobs/" + quote(job_id, safe="") + "/events?after_seq=" + str(after_seq))
+        if type(limit) is not int or not 1 <= limit <= 256:
+            raise ValueError("event limit must be 1..256")
+        return self._call("GET", "/v1/jobs/" + quote(job_id, safe="") + "/events?limit=" + str(limit) + "&after_seq=" + str(after_seq))
+
+    def event_pages(self, job_id, after_seq=0, limit=128):
+        """Drain currently available pages, then return; never poll forever."""
+        while True:
+            page = self.events(job_id, after_seq, limit)
+            if type(page.get("next_seq")) is not int or page["next_seq"] < after_seq:
+                raise ValueError("invalid runtime event cursor")
+            if type(page.get("has_more")) is not bool or (page["has_more"] and page["next_seq"] == after_seq):
+                raise ValueError("runtime event page made no progress")
+            yield page
+            after_seq = page["next_seq"]
+            if not page["has_more"]:
+                return
 
     def cancel(self, request_id):
         return self._call("POST", "/v1/requests/" + quote(request_id, safe="") + "/cancel")

@@ -1,11 +1,14 @@
 package server_test
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"focus-test-runtime/internal/protocol"
 	"focus-test-runtime/internal/runtime"
 	"focus-test-runtime/internal/server"
 )
@@ -46,5 +49,44 @@ func TestRequestBoundary(t *testing.T) {
 				t.Fatal("API response is not JSON")
 			}
 		})
+	}
+}
+
+func TestEventPaginationOverHTTP(t *testing.T) {
+	s := runtime.New()
+	bound, err := s.Submit(protocol.FixtureRequest{ProtocolVersion: 1, IdempotencyKey: "pages", TestIDs: []string{"fixture.pass"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	handler := server.New(s)
+	after := 0
+	for {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest("GET", fmt.Sprintf("/v1/jobs/%s/events?after_seq=%d&limit=1", bound.JobID, after), nil))
+		var page protocol.EventPage
+		if response.Code != 200 || json.Unmarshal(response.Body.Bytes(), &page) != nil {
+			t.Fatalf("bad page: %s", response.Body.String())
+		}
+		if len(page.Events) != 1 || page.NextSeq != after+1 {
+			t.Fatalf("invalid continuation: %+v", page)
+		}
+		after = page.NextSeq
+		if page.Terminal {
+			if page.HasMore {
+				t.Fatal("terminal has tail")
+			}
+			break
+		}
+		if !page.HasMore {
+			t.Fatal("closed job lost events")
+		}
+	}
+	for _, query := range []string{"limit=0", "limit=257", "limit=NaN", "limit=1&limit=2", "after_seq=99999"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest("GET", "/v1/jobs/"+bound.JobID+"/events?"+query, nil))
+		if response.Code != 400 {
+			t.Fatalf("query %s returned %d", query, response.Code)
+		}
 	}
 }

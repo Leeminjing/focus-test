@@ -53,8 +53,12 @@ class RuntimeFeedbackMiddleware(AgentMiddleware):
         retained = {message.id for message in state["messages"]}
         messages, pending = [], []
         for binding in self.store.bindings(owner):
-            page = await asyncio.to_thread(self.client.events, binding["job_id"], 0)
-            self.store.observe(binding, page["events"])
+            # Until the durable per-subscriber cursor is installed, drain all
+            # bounded pages so introducing pagination cannot hide a late failure.
+            def observe_available():
+                for page in self.client.event_pages(binding["job_id"], 0):
+                    self.store.observe(binding, page["events"])
+            await asyncio.to_thread(observe_available)
             for identity, observation in self.store.notices(binding):
                 pending.append(identity)
                 if identity not in retained:

@@ -1,0 +1,10 @@
+{
+  "protocol_version": 1,
+  "mode": "local-process",
+  "events": [
+    {"job_id": "job-example", "seq": 129, "kind": "case_failed", "test_id": "sample.test.cjs::failure", "message": "expected 5, received 4"}
+  ],
+  "next_seq": 129,
+  "terminal": false,
+  "has_more": true
+}
