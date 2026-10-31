@@ -21,6 +21,7 @@
 - [x] CPU/内存准入、同 Context FIFO、跨 Context 轮转、独占资源、老任务预留。
 - [x] 取消和等待期限只影响当前订阅，最后一个订阅离开才取消 Job。
 - [x] 带序号和校验的追加事件日志、同步落盘及终态恢复。
+- [x] PR1：事件数量/编码字节双重分页、精确 next_seq、has_more、流尾 terminal；数千事件完整续读。
 - [x] 新请求不复用已完成结果，幂等重试保留原请求身份。
 
 通用 node-v1/pytest-v1 仍只允许 `reuse_policy: none`。node-sealed-v1 只开放自包含 CJS/ESM/JSON 单元测试及有限内置模块，完整边界见 [node-sealed.md](node-sealed.md)，不扩展到 npm、数据库或网络测试。

@@ -30,6 +30,7 @@ var (
 	ErrUnsupported = errors.New("execution provider does not support the requested contract")
 	ErrSnapshot    = errors.New("snapshot_unavailable")
 	ErrCleanup     = errors.New("cleanup_unconfirmed: admission stopped; inspect retained attempts")
+	ErrEventQuery  = errors.New("invalid_event_query")
 )
 
 const MaxJobs = 128
@@ -375,6 +376,13 @@ func (s *Service) Result(id string) (protocol.Result, error) {
 }
 
 func (s *Service) Events(id string, after int) (protocol.EventPage, error) {
+	return s.ReadEvents(id, protocol.EventQuery{AfterSeq: after, Limit: protocol.DefaultEventLimit})
+}
+
+func (s *Service) ReadEvents(id string, query protocol.EventQuery) (protocol.EventPage, error) {
+	if err := query.Validate(); err != nil {
+		return protocol.EventPage{}, fmt.Errorf("%w: %v", ErrEventQuery, err)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.fatal != nil {
@@ -384,12 +392,29 @@ func (s *Service) Events(id string, after int) (protocol.EventPage, error) {
 	if j == nil {
 		return protocol.EventPage{}, ErrNotFound
 	}
-	page := protocol.EventPage{ProtocolVersion: protocol.Version, Mode: j.Result.Mode, Events: []protocol.Event{}, NextSeq: len(j.Events), Terminal: terminal(j.Result.Status)}
-	for _, e := range j.Events {
-		if e.Seq > after {
-			page.Events = append(page.Events, e)
-		}
+	if query.AfterSeq > len(j.Events) {
+		return protocol.EventPage{}, fmt.Errorf("%w: cursor is ahead of this job", ErrEventQuery)
 	}
+	page := protocol.EventPage{ProtocolVersion: protocol.Version, Mode: j.Result.Mode, Events: []protocol.Event{}, NextSeq: query.AfterSeq}
+	// Reserve envelope space (including sequence digit growth and newline).
+	bytes := 1024
+	for _, e := range j.Events[query.AfterSeq:] {
+		encoded, err := json.Marshal(e)
+		if err != nil {
+			return protocol.EventPage{}, err
+		}
+		if bytes+len(encoded)+1 > protocol.MaxEventPageBytes || len(page.Events) == query.Limit {
+			break
+		}
+		bytes += len(encoded) + 1
+		page.Events = append(page.Events, e)
+		page.NextSeq = e.Seq
+	}
+	if len(page.Events) == 0 && query.AfterSeq < len(j.Events) {
+		return protocol.EventPage{}, errors.New("event exceeds page byte limit")
+	}
+	page.HasMore = page.NextSeq < len(j.Events)
+	page.Terminal = terminal(j.Result.Status) && !page.HasMore
 	return page, nil
 }
 
