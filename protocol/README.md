@@ -18,6 +18,7 @@ fallbacks. This transport does not provide Focus's execution authority.
 | POST | `/v1/jobs/{id}/references` | Retain original evidence using an opaque reference_id |
 | DELETE | `/v1/jobs/{id}/references/{reference_id}` | Release only that reference |
 | POST | `/v1/maintenance/collect` | Collect expired unreferenced settled evidence |
+| GET | `/v1/maintenance` | Retained counts, journal bytes and last collection error |
 | GET | `/v1/jobs/{id}/events?after_seq=N` | Strictly newer events, next cursor, terminal flag |
 | GET | `/v1/requests/{id}/logs?stream=stderr&offset=N` | Up to 64 KiB of log text, byte cursor |
 | POST | `/v1/fixture-jobs` | Backward-compatible unsealed built-in simulation submission |

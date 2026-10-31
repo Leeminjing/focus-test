@@ -308,6 +308,31 @@ func (s *Store) load(id string) (Sealed, error) {
 // Materialize creates a private writable copy beneath the store. The returned
 // directory never shares writable hard links with content objects or source.
 func (s *Store) Materialize(ctx context.Context, id string) (string, error) {
+	return s.materialize(ctx, id, "work/"+rand.Text())
+}
+
+// AttemptWorkspace returns a rooted execution identity before any directory
+// exists, so the runtime can durably reserve it before copying input files.
+func (s *Store) AttemptWorkspace(attemptID string) (string, error) {
+	if !strings.HasPrefix(attemptID, "attempt-") || len(attemptID) > 128 {
+		return "", errors.New("invalid attempt identity")
+	}
+	for _, c := range attemptID {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return "", errors.New("invalid attempt identity")
+		}
+	}
+	return filepath.Join(s.path, "work", attemptID), nil
+}
+
+func (s *Store) MaterializeAttempt(ctx context.Context, id, attemptID string) (string, error) {
+	if _, err := s.AttemptWorkspace(attemptID); err != nil {
+		return "", err
+	}
+	return s.materialize(ctx, id, "work/"+attemptID)
+}
+
+func (s *Store) materialize(ctx context.Context, id, name string) (string, error) {
 	lock, err := s.operationLock(ctx)
 	if err != nil {
 		return "", err
@@ -317,7 +342,6 @@ func (s *Store) Materialize(ctx context.Context, id string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	name := "work/" + rand.Text()
 	if err := s.root.Mkdir(name, 0700); err != nil {
 		return "", err
 	}

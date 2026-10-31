@@ -38,6 +38,9 @@ func TestRewriteKeepsLockAndCompleteRecovery(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer restored.Close()
+	if _, err := os.Stat(filepath.Join(dir, ".pending-crash")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("abandoned checkpoint was not reclaimed")
+	}
 	if len(records) != 2 || records[0].Kind != "retained" || records[1].Seq != 2 {
 		t.Fatalf("bad checkpoint recovery: %+v", records)
 	}

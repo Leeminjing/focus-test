@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 )
 
@@ -76,6 +77,24 @@ func Open(directory string) (*Journal, []Record, error) {
 		}
 		j.seq = record.Seq
 		records = append(records, record)
+	}
+	entries, err := os.ReadDir(directory)
+	if err != nil {
+		return fail(err)
+	}
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".pending-") {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return fail(err)
+		}
+		if info.Mode().IsRegular() {
+			if err := os.Remove(filepath.Join(directory, entry.Name())); err != nil {
+				return fail(fmt.Errorf("abandoned checkpoint cleanup: %w", err))
+			}
+		}
 	}
 	return j, records, nil
 }

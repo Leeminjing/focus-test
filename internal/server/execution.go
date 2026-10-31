@@ -12,6 +12,7 @@ import (
 )
 
 func registerExecutionRoutes(mux *http.ServeMux, service *runtime.Service) {
+	mux.HandleFunc("GET /v1/maintenance", func(w http.ResponseWriter, r *http.Request) { write(w, 200, service.RetentionStatus()) })
 	mux.HandleFunc("POST /v1/jobs/{job}/references", func(w http.ResponseWriter, r *http.Request) {
 		var request protocol.ReferenceRequest
 		if !decodeRequest(w, r, &request) {

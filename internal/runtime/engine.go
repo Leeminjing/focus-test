@@ -88,23 +88,24 @@ type change struct {
 }
 
 type Service struct {
-	mu              sync.Mutex
-	jobs            map[string]*job
-	requests        map[string]*requestState
-	keys            map[string]string
-	inflight        map[string]string
-	queue           []string
-	lastCaller      string
-	config          Config
-	journal         *evidence.Journal
-	ctx             context.Context
-	cancel          context.CancelFunc
-	wg              sync.WaitGroup
-	closed          bool
-	fatal           error
-	quarantined     bool
-	nextCollection  time.Time
-	lastCompactSize int64
+	mu               sync.Mutex
+	jobs             map[string]*job
+	requests         map[string]*requestState
+	keys             map[string]string
+	inflight         map[string]string
+	queue            []string
+	lastCaller       string
+	config           Config
+	journal          *evidence.Journal
+	ctx              context.Context
+	cancel           context.CancelFunc
+	wg               sync.WaitGroup
+	closed           bool
+	fatal            error
+	quarantined      bool
+	nextCollection   time.Time
+	lastCompactSize  int64
+	maintenanceError string
 }
 
 func New() *Service {
@@ -597,12 +598,15 @@ func (s *Service) run(ctx context.Context, j *job) {
 	workspace := ""
 	var summary *runner.Outcome
 	if !j.Legacy {
-		workspace, err = s.config.Snapshots.Materialize(ctx, j.Spec.SnapshotID)
+		workspace, err = s.config.Snapshots.AttemptWorkspace(j.Result.AttemptID)
 	}
 	if err == nil && workspace != "" {
 		s.mu.Lock()
 		err = s.commit(change{Kind: "workspace", JobID: j.ID, Workspace: workspace})
 		s.mu.Unlock()
+	}
+	if err == nil && !j.Legacy {
+		_, err = s.config.Snapshots.MaterializeAttempt(ctx, j.Spec.SnapshotID, j.Result.AttemptID)
 	}
 	if err == nil && j.Spec.Plan.Adapter == "fixture-v1" {
 		err = fixture.Run(ctx, j.Spec.Plan.TestIDs, func(kind, id string) {
@@ -659,7 +663,7 @@ func (s *Service) commit(c change) error {
 			}
 		}
 		reserve := int64(2 << 20)
-		if c.Kind == "finished" || c.Kind == "detached" {
+		if c.Kind == "finished" || c.Kind == "detached" || (c.Kind == "reference" && c.Status == "released") {
 			reserve = 0
 		}
 		if err := s.journal.AppendReserved("transition", c, reserve); err != nil {

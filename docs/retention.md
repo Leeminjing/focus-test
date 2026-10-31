@@ -15,6 +15,7 @@
 | 持久化引用 | POST `/v1/jobs/{job}/references`，正文 `{"reference_id":"focus-adoption-A"}` |
 | 释放该引用 | DELETE `/v1/jobs/{job}/references/{reference_id}` |
 | 立即按保留期收集 | POST `/v1/maintenance/collect` |
+| 容量与清理错误 | GET `/v1/maintenance` |
 
 建立和释放均幂等；每 Job 至多 1024 个引用。引用没有自动到期，Focus 必须在受信请求绑定/验收流程中建立和释放，不能依赖运行时猜测证据是否仍被引用。Python 客户端提供 retain/release。当前可选 Focus 图反馈仍是实验接入，不构成生产 ResultAdoption；生产生命周期尚未装配。
 
@@ -25,7 +26,9 @@
 3. 只有 checkpoint 发布成功，才从内存移除旧请求/幂等索引。压缩保留原始 result_digest、Attempt 和公开事件 seq；内部日志 seq 重新编号。
 4. 之后才清理快照及工作目录。清理中崩溃只留下待再次回收的孤立文件，不能先删仍在耐久状态内的证据。
 
-日志在 48 MiB 后尝试压缩，压缩无法减少受保护数据时保留数据并施加背压。普通转换预留 2 MiB 用于取消和结算；达到普通容量不会毒化已有日志。运行器收到容量拒绝会取消并确认清理，再使用预留空间发布 inconclusive 终态。真实写入/同步失败仍停止可信发布。
+文件清扫不在事件提交路径执行；可恢复的清扫失败不能挡住取消或最终结算，最近错误通过维护接口报告，后续收集重试。有效 canonical journal 在持有状态 OS 锁并完成校验后，才清除遗留的普通 `.pending-*` checkpoint 文件；从不将未发布临时文件提升为可信状态。
+
+日志在 48 MiB 后尝试压缩，压缩无法减少受保护数据时保留数据并施加背压。普通转换预留 2 MiB 用于取消、结算和释放引用；达到普通容量不会毒化已有日志。运行器收到容量拒绝会取消并确认清理，再使用预留空间发布 inconclusive 终态。真实写入/同步失败仍停止可信发布。执行目录在复制前以 Attempt 身份耐久预留，收集不会依赖时间宽限猜测一个正在准备的目录是否活跃。
 
 快照 Seal/Load/Materialize/收集共享进程内门闩和跨进程 OS 操作锁，因此 CLI 封存与收集不会交错删除同一输入。重新封存会刷新 manifest 的宽限期；活跃 manifest 和年轻 manifest 引用的对象都受保护。执行目录仅从 rooted store 的直接 work 子目录选择，使用 rooted 操作删除，不接受外部绝对清理路径。
 

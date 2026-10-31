@@ -103,6 +103,9 @@ func (s *Service) collectLocked(now time.Time, pressure bool, pending *change) (
 	// Checkpoint first, then forget metadata, then sweep files. A crash can leave
 	// garbage behind, but cannot delete evidence still present in durable state.
 	compact := s.journal != nil && s.journal.Size() > evidence.MaxJournal*3/4 && (s.lastCompactSize == 0 || s.journal.Size() >= s.lastCompactSize+(4<<20))
+	if pending != nil && pending.Kind == "reference" && pending.Status == "released" && s.journal != nil && s.journal.Size() > evidence.MaxJournal-(2<<20) {
+		compact = true
+	}
 	if pressure && len(victims) == 0 && !compact {
 		return result, nil
 	}
@@ -138,7 +141,7 @@ func (s *Service) collectLocked(now time.Time, pressure bool, pending *change) (
 		}
 		s.queue = queue
 	}
-	if s.config.Snapshots != nil && s.journal != nil && s.ctx.Err() == nil {
+	if pending == nil && s.config.Snapshots != nil && s.journal != nil && s.ctx.Err() == nil {
 		keep := snapshot.Retention{Snapshots: map[string]bool{}, Workspaces: map[string]bool{}, Before: now.Add(-s.config.Retention.InputGrace)}
 		for _, j := range s.jobs {
 			if !j.Legacy {
@@ -148,21 +151,25 @@ func (s *Service) collectLocked(now time.Time, pressure bool, pending *change) (
 				keep.Workspaces[j.Result.Workspace] = true
 			}
 		}
-		if pending != nil {
-			if pending.Job != nil && !pending.Job.Legacy {
-				keep.Snapshots[pending.Job.Spec.SnapshotID] = true
-			}
-			if pending.Workspace != "" {
-				keep.Workspaces[pending.Workspace] = true
-			}
-		}
 		var err error
 		result.Snapshots, err = s.config.Snapshots.Collect(s.ctx, keep)
 		if err != nil {
+			s.maintenanceError = err.Error()
 			return result, err
 		}
+		s.maintenanceError = ""
 	}
 	return result, nil
+}
+
+func (s *Service) RetentionStatus() map[string]any {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	bytes := int64(0)
+	if s.journal != nil {
+		bytes = s.journal.Size()
+	}
+	return map[string]any{"retained_jobs": len(s.jobs), "retained_requests": len(s.requests), "journal_bytes": bytes, "last_collection_error": s.maintenanceError}
 }
 
 type restoredEvents struct {
