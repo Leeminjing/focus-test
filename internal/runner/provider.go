@@ -50,7 +50,7 @@ type adapter struct {
 type Provider struct{ adapters map[string]adapter }
 
 func Open(adapterDirectory string) (*Provider, error) {
-	abs, err := filepath.Abs(adapterDirectory)
+	abs, err := canonicalDirectory(adapterDirectory)
 	if err != nil {
 		return nil, err
 	}
@@ -186,6 +186,15 @@ func (p *Provider) Validate(spec protocol.ExecutionRequest) error {
 
 func (p *Provider) Run(ctx context.Context, spec protocol.ExecutionRequest, workspace string, emit func(AdapterEvent) error) Outcome {
 	result := Outcome{ExitCode: -1, Cleanup: "not_started"}
+	// CWD and module resolution use physical paths. Permission grants and the
+	// dependency guard must use that same identity (macOS /var -> /private/var,
+	// Windows junctions), rather than granting a wider ancestor directory.
+	var err error
+	workspace, err = canonicalDirectory(workspace)
+	if err != nil {
+		result.Err = err
+		return result
+	}
 	if err := p.Validate(spec); err != nil {
 		result.Err = err
 		return result
@@ -345,6 +354,14 @@ func (p *Provider) Run(ctx context.Context, spec protocol.ExecutionRequest, work
 			}
 		}
 	}
+}
+
+func canonicalDirectory(name string) (string, error) {
+	abs, err := filepath.Abs(name)
+	if err != nil {
+		return "", err
+	}
+	return physicalDirectory(abs)
 }
 
 func fileURL(name string) string {

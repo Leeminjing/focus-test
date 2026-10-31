@@ -3,7 +3,9 @@ package runner
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -41,9 +43,38 @@ func TestSealedNodeDependencyBoundary(t *testing.T) {
 			if actual.Err != nil || actual.Cleanup != "confirmed" || (actual.ExitCode == 0) != tc.pass || (tc.pass && !actual.ReportComplete) {
 				stderr, _ := os.ReadFile(filepath.Join(workspace, ".focus-test", "stderr.log"))
 				stdout, _ := os.ReadFile(filepath.Join(workspace, ".focus-test", "stdout.log"))
-				t.Fatalf("result=%+v stderr=%s stdout=%s", actual, stderr, stdout)
+				events, _ := os.ReadFile(filepath.Join(workspace, ".focus-test", "adapter.jsonl"))
+				t.Fatalf("result=%+v stderr=%s stdout=%s events=%s", actual, stderr, stdout, events)
 			}
 		})
+	}
+}
+
+func TestSealedNodeCanonicalWorkspace(t *testing.T) {
+	p, r, workspace := providerFixture(t, "node-sealed-v1", `const {test}=require('node:test');const assert=require('node:assert/strict');test('linked workspace',()=>assert.equal(require('./value.cjs'),42));`)
+	if err := os.WriteFile(filepath.Join(workspace, "value.cjs"), []byte(`module.exports=42;`), 0600); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(workspace, alias); err != nil {
+		if runtime.GOOS != "windows" {
+			t.Skipf("host cannot create directory links: %v", err)
+		}
+		// Windows junction creation needs no symlink privilege. Both targets
+		// are owned temporary directories; pass paths as environment data.
+		cmd := exec.Command("powershell.exe", "-NoProfile", "-NonInteractive", "-Command", `$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:FOCUS_TEST_ALIAS -Target $env:FOCUS_TEST_TARGET | Out-Null`)
+		cmd.Env = append(os.Environ(), "FOCUS_TEST_ALIAS="+alias, "FOCUS_TEST_TARGET="+workspace)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("create test path alias: %v %s", err, output)
+		}
+	}
+	r.ReusePolicy = "inflight"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	result := p.Run(ctx, r, alias, func(AdapterEvent) error { return nil })
+	if result.Err != nil || result.ExitCode != 0 || !result.ReportComplete {
+		events, _ := os.ReadFile(filepath.Join(workspace, ".focus-test", "adapter.jsonl"))
+		t.Fatalf("path alias changed sealed dependency permissions: %+v events=%s", result, events)
 	}
 }
 

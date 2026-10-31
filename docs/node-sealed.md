@@ -11,6 +11,7 @@
 - Node permission model 允许读取物化目录与可信适配器目录，只允许写适配器事件文件，不授予子进程、worker、addon、WASI 或 inspector 权限。Reporter 的可信权限不授予项目模块。
 - 子进程环境只保留固定 `TZ=UTC`、`LANG=C`、`LC_ALL=C` 和 Windows 必需的 SystemRoot。用户 NODE_OPTIONS、NODE_PATH、LD_PRELOAD、Python 环境等均不继承。
 - 使用 `--test-isolation=none`，保持一个 Node 进程，`workers` 必须为 1。用例内部仍可声明并发；CPU/内存继续是准入估计。
+- 执行根与可信适配器目录均解析为真实路径，再生成模块边界及 permission grants；macOS `/var` 别名和 Windows junction 不会导致合法相对模块被误拒绝，不扩大到父目录授权。
 
 执行身份包含源码快照、Node 可执行文件字节、reporter 与 guard 摘要、实际环境、范围、超时、策略和资源。启动与结算都核验提供者环境。宿主 OS、系统运行库和 Node 自身是受信平台基础，不跨机器复用；不宣称将整个操作系统封存。
 
